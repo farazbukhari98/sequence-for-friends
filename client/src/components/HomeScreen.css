@@ -1,0 +1,174 @@
+.home-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: linear-gradient(145deg, var(--bg-primary) 0%, #0a1015 100%);
+  min-height: 100%;
+}
+
+.home-content {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* Logo */
+.home-logo {
+  text-align: center;
+  margin-bottom: var(--space-xl);
+}
+
+.logo-icon {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto var(--space-lg);
+  background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+  border-radius: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+}
+
+.logo-s {
+  font-size: 64px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logo-chips {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+}
+
+.logo-chips .chip {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.chip-blue {
+  background: var(--team-blue);
+}
+
+.chip-green {
+  background: var(--team-green);
+}
+
+.logo-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.logo-subtitle {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  margin: var(--space-xs) 0 0;
+}
+
+/* Buttons */
+.home-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* Footer */
+.home-footer {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-top: var(--space-xl);
+}
+
+/* Back button */
+.back-button {
+  align-self: flex-start;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  padding: var(--space-sm) 0;
+  margin-bottom: var(--space-sm);
+  transition: color 0.2s;
+}
+
+.back-button:hover {
+  color: var(--accent-primary);
+}
+
+/* Form */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.form-group label {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.form-error {
+  background: rgba(233, 69, 96, 0.15);
+  border: 1px solid var(--accent-danger);
+  color: var(--accent-danger);
+  padding: var(--space-md);
+  border-radius: var(--border-radius-md);
+  font-size: 0.9rem;
+}
+
+/* Room code input */
+.room-code-input {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  text-align: center;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* Player count grid */
+.player-count-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-sm);
+}
+
+.player-count-btn {
+  padding: var(--space-md);
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  font-weight: 600;
+  font-size: 1.1rem;
+  transition: all 0.2s;
+}
+
+.player-count-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-card);
+}
+
+.player-count-btn.active {
+  border-color: var(--accent-primary);
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--accent-primary);
+}

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: sequence-for-friends
+    runtime: node
+    plan: free
+    buildCommand: npm ci && cd client && npm ci && cd ../server && npm ci && cd .. && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+    healthCheckPath: /

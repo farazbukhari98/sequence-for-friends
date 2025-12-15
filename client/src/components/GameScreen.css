@@ -1,0 +1,300 @@
+.game-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  min-height: 100%;
+  overflow: hidden;
+}
+
+/* Header */
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  min-height: 52px;
+}
+
+.game-header-left,
+.game-header-right {
+  min-width: 80px;
+}
+
+.game-header-left {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.game-header-right {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.game-header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.menu-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  transition: all 0.2s;
+}
+
+.menu-btn:hover {
+  background: var(--accent-danger);
+  color: white;
+}
+
+/* Turn Indicator */
+.turn-indicator {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.your-turn {
+  color: var(--accent-primary);
+  animation: pulse 2s infinite;
+}
+
+.waiting-turn {
+  color: var(--text-secondary);
+}
+
+.winner-text {
+  color: var(--accent-warning);
+  font-size: 1.1rem;
+}
+
+/* Score Display */
+.score-display {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.score-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.score-chip {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--bg-primary);
+}
+
+.score-value {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+/* Board Container */
+.board-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+  position: relative;
+  background: linear-gradient(145deg, var(--bg-primary), #0a1015);
+}
+
+.board-wrapper {
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.reset-zoom-btn {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--border-radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+  z-index: 10;
+  transition: all 0.2s;
+}
+
+.reset-zoom-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+}
+
+/* Action Bar */
+.action-bar {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+}
+
+.confirm-actions {
+  display: flex;
+  gap: var(--space-md);
+  width: 100%;
+  max-width: 400px;
+}
+
+.confirm-actions .btn {
+  flex: 1;
+}
+
+.draw-btn {
+  width: 100%;
+  max-width: 300px;
+  animation: pulse 2s infinite;
+}
+
+.step-hint {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.step-hint.waiting {
+  color: var(--text-muted);
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: var(--space-lg);
+  animation: fadeIn 0.3s ease;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-xl);
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  animation: scaleIn 0.3s ease;
+}
+
+.modal-content h2 {
+  margin-bottom: var(--space-md);
+}
+
+/* Cut Cards Modal */
+.cut-cards-modal {
+  max-width: 350px;
+}
+
+.cut-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.cut-card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-tertiary);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--border-radius-md);
+}
+
+.cut-card-item.dealer {
+  background: rgba(78, 205, 196, 0.15);
+  border: 1px solid var(--accent-primary);
+}
+
+.cut-player-name {
+  font-weight: 500;
+}
+
+.cut-card-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.dealer-badge {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.cut-info {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: var(--space-lg);
+}
+
+/* Winner Modal */
+.winner-modal {
+  padding: var(--space-xl) var(--space-lg);
+}
+
+.winner-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  margin: 0 auto var(--space-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.winner-modal h2 {
+  font-size: 1.75rem;
+  margin-bottom: var(--space-sm);
+}
+
+.winner-modal p {
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xl);
+}
+
+/* Responsive */
+@media (max-height: 700px) {
+  .game-header {
+    min-height: 44px;
+    padding: var(--space-xs) var(--space-md);
+  }
+
+  .action-bar {
+    min-height: 48px;
+    padding: var(--space-xs) var(--space-md);
+  }
+}

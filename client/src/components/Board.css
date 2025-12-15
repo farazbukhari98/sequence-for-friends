@@ -1,0 +1,238 @@
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--board-bg);
+  padding: 8px;
+  border-radius: var(--border-radius-lg);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+  touch-action: none;
+  user-select: none;
+}
+
+.board-row {
+  display: flex;
+  gap: 2px;
+}
+
+.board-cell {
+  position: relative;
+  width: 36px;
+  height: 44px;
+  background: var(--board-cell);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s, background-color 0.15s;
+  overflow: hidden;
+}
+
+.board-cell:active {
+  transform: scale(0.95);
+}
+
+.board-cell.corner {
+  background: linear-gradient(135deg, var(--board-corner), #a88720);
+}
+
+.board-cell.highlighted {
+  background: var(--board-cell-hover);
+  cursor: pointer;
+}
+
+.board-cell.locked {
+  /* Subtle indication that this cell is locked */
+}
+
+.board-cell.in-sequence {
+  /* Cells that are part of a completed sequence */
+}
+
+/* Card face */
+.card-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.card-face.red {
+  color: var(--suit-red);
+}
+
+.card-face.black {
+  color: var(--suit-black);
+}
+
+.card-rank {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.card-suit {
+  font-size: 12px;
+  margin-top: -2px;
+}
+
+/* Wild corner */
+.wild-corner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wild-star {
+  font-size: 20px;
+  color: var(--bg-primary);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Chip */
+.chip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  animation: chipPlace 0.3s ease-out;
+  z-index: 2;
+}
+
+.chip.locked {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.3), 0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+.chip-letter {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--bg-primary);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+/* Preview chip */
+.chip.preview {
+  opacity: 0.7;
+  animation: none;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+}
+
+/* Removing chip */
+.chip.removing {
+  animation: chipPulse 0.5s ease infinite;
+}
+
+.remove-x {
+  position: absolute;
+  font-size: 20px;
+  color: white;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Highlight overlay */
+.highlight-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--board-highlight);
+  border-radius: 4px;
+  pointer-events: none;
+  animation: highlightPulse 1.5s ease infinite;
+}
+
+/* Sequence glow */
+.sequence-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Animations */
+@keyframes chipPlace {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes chipPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+}
+
+@keyframes highlightPulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Responsive - slightly larger on bigger screens */
+@media (min-width: 420px) {
+  .board-cell {
+    width: 40px;
+    height: 48px;
+  }
+
+  .card-rank {
+    font-size: 14px;
+  }
+
+  .card-suit {
+    font-size: 13px;
+  }
+
+  .chip {
+    width: 30px;
+    height: 30px;
+  }
+
+  .chip-letter {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 500px) {
+  .board-cell {
+    width: 44px;
+    height: 52px;
+  }
+
+  .card-rank {
+    font-size: 15px;
+  }
+
+  .card-suit {
+    font-size: 14px;
+  }
+
+  .chip {
+    width: 32px;
+    height: 32px;
+  }
+}
