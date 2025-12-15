@@ -189,11 +189,20 @@ function BoardCell({
       {/* Highlight overlay */}
       {isHighlighted && <div className="highlight-overlay" />}
 
-      {/* Sequence glow */}
+      {/* Sequence glow - enhanced visibility */}
       {sequenceTeam !== undefined && (
         <div
           className="sequence-glow"
-          style={{ boxShadow: `0 0 12px ${getTeamColorHex(teamColors[sequenceTeam])}` }}
+          style={{
+            boxShadow: `
+              0 0 8px 2px ${getTeamColorHex(teamColors[sequenceTeam])},
+              0 0 16px 4px ${getTeamColorHex(teamColors[sequenceTeam])},
+              0 0 24px 6px ${getTeamColorHex(teamColors[sequenceTeam])}80,
+              inset 0 0 8px ${getTeamColorHex(teamColors[sequenceTeam])}60
+            `,
+            border: `2px solid ${getTeamColorHex(teamColors[sequenceTeam])}`,
+            backgroundColor: `${getTeamColorHex(teamColors[sequenceTeam])}20`
+          }}
         />
       )}
     </div>

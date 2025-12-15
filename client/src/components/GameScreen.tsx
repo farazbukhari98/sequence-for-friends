@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type {
   ClientGameState,
   CardCode,
@@ -6,6 +6,8 @@ import type {
   MoveResult,
   CutCard,
   TeamColor,
+  SequenceLine,
+  PublicPlayer,
 } from '../../../shared/types';
 import {
   findCardPositions,
@@ -29,6 +31,13 @@ interface GameScreenProps {
 
 type GameStep = 'select-card' | 'select-target' | 'confirm' | 'draw';
 
+// Track new sequences for celebration
+interface SequenceCelebration {
+  teamIndex: number;
+  teamColor: TeamColor;
+  playerNames: string[];
+}
+
 export function GameScreen({
   gameState,
   playerId,
@@ -40,6 +49,10 @@ export function GameScreen({
   const [selectedTarget, setSelectedTarget] = useState<[number, number] | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCutCards, setShowCutCards] = useState(!!cutCards);
+  const [sequenceCelebration, setSequenceCelebration] = useState<SequenceCelebration | null>(null);
+
+  // Track previous sequence count to detect new sequences
+  const prevSequenceCountRef = useRef<number[]>([...gameState.sequencesCompleted]);
 
   const { containerRef, contentRef, isZoomed, resetTransform } = usePinchZoom();
 
@@ -226,6 +239,52 @@ export function GameScreen({
     }
   }, [showCutCards, cutCards]);
 
+  // Detect new sequences and trigger celebration
+  useEffect(() => {
+    const prevCounts = prevSequenceCountRef.current;
+    const currentCounts = gameState.sequencesCompleted;
+
+    // Check if any team got a new sequence
+    for (let i = 0; i < currentCounts.length; i++) {
+      const prevCount = prevCounts[i] || 0;
+      const currentCount = currentCounts[i] || 0;
+
+      if (currentCount > prevCount) {
+        // New sequence detected!
+        const teamColor = gameState.config.teamColors[i];
+        const teamPlayers = gameState.players
+          .filter(p => p.teamIndex === i)
+          .map(p => p.name);
+
+        setSequenceCelebration({
+          teamIndex: i,
+          teamColor,
+          playerNames: teamPlayers,
+        });
+
+        // Haptic feedback for sequence
+        if (navigator.vibrate) {
+          navigator.vibrate([100, 50, 100, 50, 200]);
+        }
+
+        break;
+      }
+    }
+
+    // Update ref for next comparison
+    prevSequenceCountRef.current = [...currentCounts];
+  }, [gameState.sequencesCompleted, gameState.config.teamColors, gameState.players]);
+
+  // Auto-dismiss sequence celebration
+  useEffect(() => {
+    if (sequenceCelebration) {
+      const timer = setTimeout(() => {
+        setSequenceCelebration(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [sequenceCelebration]);
+
   return (
     <div className="game-screen">
       {/* Header */}
@@ -346,11 +405,21 @@ export function GameScreen({
         />
       )}
 
+      {/* Sequence Celebration Modal */}
+      {sequenceCelebration && gameState.winnerTeamIndex === null && (
+        <SequenceCelebrationModal
+          teamColor={sequenceCelebration.teamColor}
+          playerNames={sequenceCelebration.playerNames}
+          onDismiss={() => setSequenceCelebration(null)}
+        />
+      )}
+
       {/* Winner Modal */}
       {gameState.winnerTeamIndex !== null && (
         <WinnerModal
           winnerTeamIndex={gameState.winnerTeamIndex}
           teamColors={gameState.config.teamColors}
+          players={gameState.players}
           myTeamIndex={myPlayer?.teamIndex ?? -1}
           onLeave={onLeave}
         />
@@ -421,30 +490,121 @@ function CutCardsModal({ cutCards, dealerIndex, players, onDismiss }: CutCardsMo
   );
 }
 
+// Sequence Celebration Modal
+interface SequenceCelebrationModalProps {
+  teamColor: TeamColor;
+  playerNames: string[];
+  onDismiss: () => void;
+}
+
+function SequenceCelebrationModal({ teamColor, playerNames, onDismiss }: SequenceCelebrationModalProps) {
+  return (
+    <div className="modal-overlay celebration-overlay" onClick={onDismiss}>
+      <div className="modal-content sequence-celebration-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Confetti effect */}
+        <div className="confetti-container">
+          {Array.from({ length: 30 }).map((_, i) => (
+            <div
+              key={i}
+              className="confetti"
+              style={{
+                left: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 0.5}s`,
+                backgroundColor: i % 3 === 0 ? getTeamColorHex(teamColor) : i % 3 === 1 ? '#FFD700' : '#ffffff',
+              }}
+            />
+          ))}
+        </div>
+
+        <div
+          className="sequence-celebration-icon"
+          style={{ backgroundColor: getTeamColorHex(teamColor) }}
+        >
+          <span className="sequence-star">★</span>
+        </div>
+
+        <h2 className="sequence-celebration-title">SEQUENCE!</h2>
+
+        <div className="sequence-celebration-team">
+          Team {teamColor.toUpperCase()}
+        </div>
+
+        <div className="sequence-celebration-players">
+          {playerNames.join(' & ')}
+        </div>
+
+        <div className="sequence-celebration-subtitle">
+          scored a 5-chip sequence!
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Winner Modal
 interface WinnerModalProps {
   winnerTeamIndex: number;
   teamColors: TeamColor[];
+  players: PublicPlayer[];
   myTeamIndex: number;
   onLeave: () => void;
 }
 
-function WinnerModal({ winnerTeamIndex, teamColors, myTeamIndex, onLeave }: WinnerModalProps) {
+function WinnerModal({ winnerTeamIndex, teamColors, players, myTeamIndex, onLeave }: WinnerModalProps) {
   const isWinner = winnerTeamIndex === myTeamIndex;
   const winnerColor = teamColors[winnerTeamIndex];
+  const winningPlayers = players.filter(p => p.teamIndex === winnerTeamIndex);
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay winner-overlay">
+      {/* Confetti effect */}
+      <div className="confetti-container winner-confetti">
+        {Array.from({ length: 50 }).map((_, i) => (
+          <div
+            key={i}
+            className="confetti winner-confetti-piece"
+            style={{
+              left: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 1}s`,
+              animationDuration: `${2 + Math.random() * 2}s`,
+              backgroundColor: i % 4 === 0 ? getTeamColorHex(winnerColor) : i % 4 === 1 ? '#FFD700' : i % 4 === 2 ? '#ffffff' : '#FF69B4',
+            }}
+          />
+        ))}
+      </div>
+
       <div className="modal-content winner-modal">
         <div
           className="winner-icon"
-          style={{ backgroundColor: getTeamColorHex(winnerColor) }}
+          style={{
+            backgroundColor: getTeamColorHex(winnerColor),
+            boxShadow: `0 0 30px ${getTeamColorHex(winnerColor)}, 0 0 60px ${getTeamColorHex(winnerColor)}50`
+          }}
         >
-          {isWinner ? '🏆' : getTeamLetter(winnerColor)}
+          {isWinner ? '🏆' : '🎉'}
         </div>
-        <h2>{isWinner ? 'You Win!' : `Team ${winnerColor.toUpperCase()} Wins!`}</h2>
-        <p>{isWinner ? 'Congratulations!' : 'Better luck next time!'}</p>
-        <button className="btn btn-primary btn-lg" onClick={onLeave}>
+
+        <h2 className="winner-title">{isWinner ? 'Victory!' : 'Game Over!'}</h2>
+
+        <div
+          className="winner-team-badge"
+          style={{ backgroundColor: `${getTeamColorHex(winnerColor)}30`, borderColor: getTeamColorHex(winnerColor) }}
+        >
+          <span className="winner-team-letter" style={{ color: getTeamColorHex(winnerColor) }}>
+            {getTeamLetter(winnerColor)}
+          </span>
+          Team {winnerColor.toUpperCase()} Wins!
+        </div>
+
+        <div className="winner-players">
+          {winningPlayers.map(p => p.name).join(' & ')}
+        </div>
+
+        <p className="winner-message">
+          {isWinner ? 'Congratulations on your victory!' : 'Great game! Better luck next time!'}
+        </p>
+
+        <button className="btn btn-primary btn-lg winner-btn" onClick={onLeave}>
           Back to Home
         </button>
       </div>

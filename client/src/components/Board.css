@@ -148,13 +148,44 @@
   animation: highlightPulse 1.5s ease infinite;
 }
 
-/* Sequence glow */
+/* Sequence glow - enhanced for visibility */
 .sequence-glow {
   position: absolute;
-  inset: 0;
-  border-radius: 4px;
+  inset: -3px;
+  border-radius: 6px;
   pointer-events: none;
   z-index: 1;
+  animation: sequenceGlow 2s ease-in-out infinite;
+}
+
+.board-cell.in-sequence {
+  z-index: 5;
+}
+
+.board-cell.in-sequence .chip {
+  animation: sequenceChipPulse 2s ease-in-out infinite;
+}
+
+@keyframes sequenceGlow {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes sequenceChipPulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.08);
+    filter: brightness(1.2);
+  }
 }
 
 /* Animations */
