@@ -3,12 +3,13 @@ import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, TurnTimeLimit } from '../../../
 import './HomeScreen.css';
 
 interface HomeScreenProps {
-  onCreateRoom: (playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
+  onCreateRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
   onJoinRoom: (roomCode: string, playerName: string) => Promise<{ roomInfo?: unknown; playerId?: string; token?: string; error?: string }>;
 }
 
 export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
   const [mode, setMode] = useState<'home' | 'create' | 'join'>('home');
+  const [roomName, setRoomName] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(2);
@@ -28,7 +29,8 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
     // Determine team count based on player count
     const teamCount = maxPlayers <= 3 ? maxPlayers : (maxPlayers % 2 === 0 ? 2 : 3);
 
-    const result = await onCreateRoom(playerName.trim(), maxPlayers, teamCount, turnTimeLimit);
+    // Use room name if provided, otherwise default will be set by server
+    const result = await onCreateRoom(roomName.trim(), playerName.trim(), maxPlayers, teamCount, turnTimeLimit);
     setLoading(false);
 
     if (result.error) {
@@ -99,6 +101,20 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
       </button>
 
       <h2>Create Game</h2>
+
+      <div className="form-group">
+        <label htmlFor="roomName">Room Name</label>
+        <input
+          id="roomName"
+          type="text"
+          value={roomName}
+          onChange={(e) => setRoomName(e.target.value)}
+          placeholder="e.g., Friday Night Game"
+          maxLength={30}
+          autoComplete="off"
+        />
+        <p className="form-hint">Optional - defaults to "[Your Name]'s Game"</p>
+      </div>
 
       <div className="form-group">
         <label htmlFor="name">Your Name</label>

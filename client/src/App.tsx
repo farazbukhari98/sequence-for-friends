@@ -26,6 +26,8 @@ function App() {
     error,
     cutCards,
     turnTimeoutInfo,
+    teamSwitchRequest,
+    teamSwitchResponse,
     createRoom,
     joinRoom,
     reconnect,
@@ -34,7 +36,11 @@ function App() {
     startGame,
     sendAction,
     updateRoomSettings,
+    toggleReady,
+    requestTeamSwitch,
+    respondTeamSwitch,
     clearError,
+    clearTeamSwitchRequest,
   } = useSocket();
 
   // Check for existing session on mount
@@ -86,8 +92,8 @@ function App() {
   };
 
   // Handle creating a room
-  const handleCreateRoom = async (playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit) => {
-    const result = await createRoom(playerName, maxPlayers, teamCount, turnTimeLimit);
+  const handleCreateRoom = async (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit) => {
+    const result = await createRoom(roomName, playerName, maxPlayers, teamCount, turnTimeLimit);
     if ('error' in result) {
       return result;
     }
@@ -157,10 +163,16 @@ function App() {
         <LobbyScreen
           roomInfo={roomInfo}
           playerId={playerId}
+          teamSwitchRequest={teamSwitchRequest}
+          teamSwitchResponse={teamSwitchResponse}
           onLeave={handleLeaveRoom}
           onKickPlayer={kickPlayer}
           onStartGame={handleStartGame}
           onUpdateSettings={updateRoomSettings}
+          onToggleReady={toggleReady}
+          onRequestTeamSwitch={requestTeamSwitch}
+          onRespondTeamSwitch={respondTeamSwitch}
+          onClearTeamSwitchRequest={clearTeamSwitchRequest}
         />
       )}
 

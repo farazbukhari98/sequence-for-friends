@@ -8,6 +8,7 @@ import type {
   ClientToServerEvents,
   ServerToClientEvents,
   GameAction,
+  TeamSwitchRequest,
 } from '../../shared/types.js';
 
 import {
@@ -24,6 +25,10 @@ import {
   toClientGameState,
   cleanupOldRooms,
   updateRoomSettings,
+  toggleReady,
+  areAllPlayersReady,
+  switchPlayerTeam,
+  updateRoomActivity,
 } from './rooms.js';
 
 import { applyMove } from './rules/engine.js';
@@ -56,6 +61,9 @@ const socketToPlayer = new Map<string, { roomCode: string; playerId: string }>()
 
 // Track turn timers per room
 const roomTimers = new Map<string, NodeJS.Timeout>();
+
+// Track pending team switch requests per room
+const pendingTeamSwitches = new Map<string, Map<string, TeamSwitchRequest>>();
 
 /**
  * Clear any existing timer for a room
@@ -139,6 +147,7 @@ io.on('connection', (socket) => {
   socket.on('create-room', (data, callback) => {
     try {
       const { room, player } = createRoom(
+        data.roomName,
         data.playerName,
         data.maxPlayers,
         data.teamCount,
@@ -161,7 +170,7 @@ io.on('connection', (socket) => {
       // Send room info to the creator
       socket.emit('room-updated', roomInfo);
 
-      console.log(`Room ${room.code} created by ${player.name}`);
+      console.log(`Room "${room.name}" (${room.code}) created by ${player.name}`);
     } catch (error) {
       callback({
         success: false,
@@ -278,6 +287,133 @@ io.on('connection', (socket) => {
     io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(result));
   });
 
+  // Toggle ready status
+  socket.on('toggle-ready', (callback) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) {
+      callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+
+    const result = toggleReady(playerInfo.roomCode, playerInfo.playerId);
+
+    if ('error' in result) {
+      callback({ success: false, error: result.error });
+      return;
+    }
+
+    callback({ success: true });
+
+    // Notify all players about the updated ready status
+    io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(result));
+  });
+
+  // Request team switch
+  socket.on('request-team-switch', (toTeamIndex, callback) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) {
+      callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+
+    const room = getRoom(playerInfo.roomCode);
+    if (!room) {
+      callback({ success: false, error: 'Room not found' });
+      return;
+    }
+
+    const player = room.players.find(p => p.id === playerInfo.playerId);
+    if (!player) {
+      callback({ success: false, error: 'Player not found' });
+      return;
+    }
+
+    // If the player is the host, they can switch directly
+    if (room.hostId === playerInfo.playerId) {
+      const switchResult = switchPlayerTeam(playerInfo.roomCode, playerInfo.playerId, toTeamIndex);
+      if ('error' in switchResult) {
+        callback({ success: false, error: switchResult.error });
+        return;
+      }
+      callback({ success: true });
+      io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(switchResult));
+      return;
+    }
+
+    // Create a pending team switch request
+    if (!pendingTeamSwitches.has(playerInfo.roomCode)) {
+      pendingTeamSwitches.set(playerInfo.roomCode, new Map());
+    }
+
+    const roomSwitches = pendingTeamSwitches.get(playerInfo.roomCode)!;
+    const request: TeamSwitchRequest = {
+      playerId: playerInfo.playerId,
+      playerName: player.name,
+      fromTeamIndex: player.teamIndex,
+      toTeamIndex,
+    };
+
+    roomSwitches.set(playerInfo.playerId, request);
+
+    callback({ success: true });
+
+    // Send request to the host
+    const hostSocket = findSocketByPlayerId(room.hostId);
+    if (hostSocket) {
+      hostSocket.emit('team-switch-request', request);
+    }
+  });
+
+  // Respond to team switch request (host only)
+  socket.on('respond-team-switch', (data, callback) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) {
+      callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+
+    const room = getRoom(playerInfo.roomCode);
+    if (!room) {
+      callback({ success: false, error: 'Room not found' });
+      return;
+    }
+
+    if (room.hostId !== playerInfo.playerId) {
+      callback({ success: false, error: 'Only the host can approve team switches' });
+      return;
+    }
+
+    const roomSwitches = pendingTeamSwitches.get(playerInfo.roomCode);
+    if (!roomSwitches || !roomSwitches.has(data.playerId)) {
+      callback({ success: false, error: 'No pending switch request for this player' });
+      return;
+    }
+
+    const request = roomSwitches.get(data.playerId)!;
+    roomSwitches.delete(data.playerId);
+
+    if (data.approved) {
+      const switchResult = switchPlayerTeam(playerInfo.roomCode, data.playerId, request.toTeamIndex);
+      if ('error' in switchResult) {
+        callback({ success: false, error: switchResult.error });
+        return;
+      }
+      io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(switchResult));
+    }
+
+    callback({ success: true });
+
+    // Notify the requesting player
+    const requesterSocket = findSocketByPlayerId(data.playerId);
+    if (requesterSocket) {
+      requesterSocket.emit('team-switch-response', {
+        playerId: data.playerId,
+        approved: data.approved,
+        playerName: request.playerName,
+      });
+    }
+  });
+
   // Kick player (host only)
   socket.on('kick-player', (playerId) => {
     const playerInfo = socketToPlayer.get(socket.id);
@@ -302,6 +438,18 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Check if all players are ready
+    const room = getRoom(playerInfo.roomCode);
+    if (!room) {
+      callback({ success: false, error: 'Room not found' });
+      return;
+    }
+
+    if (!areAllPlayersReady(room)) {
+      callback({ success: false, error: 'All players must be ready to start' });
+      return;
+    }
+
     const result = startGame(playerInfo.roomCode, playerInfo.playerId);
 
     if ('error' in result) {
@@ -312,16 +460,17 @@ io.on('connection', (socket) => {
     callback({ success: true });
 
     // Send game state to each player with their private hand
-    const room = getRoom(playerInfo.roomCode);
-    if (room && room.gameState) {
+    // Re-fetch room to get updated game state
+    const updatedRoom = getRoom(playerInfo.roomCode);
+    if (updatedRoom && updatedRoom.gameState) {
       // Send cut results first
-      io.to(playerInfo.roomCode).emit('cut-result', room.gameState.cutCards, room.gameState.dealerIndex);
+      io.to(playerInfo.roomCode).emit('cut-result', updatedRoom.gameState.cutCards, updatedRoom.gameState.dealerIndex);
 
       // Send individual game states
-      for (const player of room.players) {
+      for (const player of updatedRoom.players) {
         const playerSocket = findSocketByPlayerId(player.id);
         if (playerSocket) {
-          playerSocket.emit('game-started', toClientGameState(room.gameState, player.id));
+          playerSocket.emit('game-started', toClientGameState(updatedRoom.gameState, player.id));
         }
       }
 

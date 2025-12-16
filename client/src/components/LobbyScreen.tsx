@@ -1,24 +1,36 @@
 import { useState } from 'react';
-import type { RoomInfo, PublicPlayer, TurnTimeLimit } from '../../../shared/types';
+import type { RoomInfo, PublicPlayer, TurnTimeLimit, TeamSwitchRequest } from '../../../shared/types';
 import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS } from '../../../shared/types';
 import './LobbyScreen.css';
 
 interface LobbyScreenProps {
   roomInfo: RoomInfo;
   playerId: string;
+  teamSwitchRequest: TeamSwitchRequest | null;
+  teamSwitchResponse: { playerId: string; approved: boolean; playerName: string } | null;
   onLeave: () => void;
   onKickPlayer: (playerId: string) => void;
   onStartGame: () => Promise<{ success: boolean; error?: string }>;
   onUpdateSettings: (turnTimeLimit: TurnTimeLimit) => Promise<{ success: boolean; error?: string }>;
+  onToggleReady: () => Promise<{ success: boolean; error?: string }>;
+  onRequestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
+  onRespondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
+  onClearTeamSwitchRequest: () => void;
 }
 
 export function LobbyScreen({
   roomInfo,
   playerId,
+  teamSwitchRequest,
+  teamSwitchResponse,
   onLeave,
   onKickPlayer,
   onStartGame,
   onUpdateSettings,
+  onToggleReady,
+  onRequestTeamSwitch,
+  onRespondTeamSwitch,
+  onClearTeamSwitchRequest,
 }: LobbyScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,12 +38,21 @@ export function LobbyScreen({
 
   const isHost = roomInfo.hostId === playerId;
   const canStart = VALID_PLAYER_COUNTS.includes(roomInfo.players.length);
+  const allPlayersReady = roomInfo.players.every(p => p.ready);
+  const myPlayer = roomInfo.players.find(p => p.id === playerId);
 
   const handleStart = async () => {
     setLoading(true);
     setError(null);
     const result = await onStartGame();
     setLoading(false);
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleToggleReady = async () => {
+    const result = await onToggleReady();
     if (result.error) {
       setError(result.error);
     }
@@ -58,7 +79,7 @@ export function LobbyScreen({
   const handleShare = async () => {
     const shareData = {
       title: 'Join my Sequence game!',
-      text: `Join my Sequence game! Room code: ${roomInfo.code}`,
+      text: `Join my Sequence game "${roomInfo.name}"! Room code: ${roomInfo.code}`,
       url: window.location.href,
     };
 
@@ -73,13 +94,40 @@ export function LobbyScreen({
     }
   };
 
+  const handleTeamSwitchRequest = async (toTeamIndex: number) => {
+    const result = await onRequestTeamSwitch(toTeamIndex);
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleRespondTeamSwitch = async (approved: boolean) => {
+    if (!teamSwitchRequest) return;
+    await onRespondTeamSwitch(teamSwitchRequest.playerId, approved);
+    onClearTeamSwitchRequest();
+  };
+
+  // Get teams for display
+  const teams: Map<number, PublicPlayer[]> = new Map();
+  for (let i = 0; i < roomInfo.teamCount; i++) {
+    teams.set(i, []);
+  }
+  for (const player of roomInfo.players) {
+    const teamPlayers = teams.get(player.teamIndex) || [];
+    teamPlayers.push(player);
+    teams.set(player.teamIndex, teamPlayers);
+  }
+
+  const teamColors = roomInfo.teamCount === 2 ? ['blue', 'green'] : ['blue', 'green', 'red'];
+  const teamNames = ['Blue Team', 'Green Team', 'Red Team'];
+
   return (
     <div className="lobby-screen">
       <header className="lobby-header">
         <button className="back-button" onClick={onLeave}>
           ← Leave
         </button>
-        <h1>Lobby</h1>
+        <h1>{roomInfo.name}</h1>
         <div className="header-spacer"></div>
       </header>
 
@@ -100,37 +148,107 @@ export function LobbyScreen({
           </div>
         </div>
 
-        {/* Player List */}
-        <div className="players-section">
-          <div className="players-header">
-            <h2>Players</h2>
+        {/* Team Switch Request Modal (for host) */}
+        {isHost && teamSwitchRequest && (
+          <div className="team-switch-modal">
+            <div className="team-switch-content">
+              <p>
+                <strong>{teamSwitchRequest.playerName}</strong> wants to switch from{' '}
+                <span style={{ color: getTeamColorHex(teamColors[teamSwitchRequest.fromTeamIndex] as 'blue' | 'green' | 'red') }}>
+                  {teamNames[teamSwitchRequest.fromTeamIndex]}
+                </span>{' '}
+                to{' '}
+                <span style={{ color: getTeamColorHex(teamColors[teamSwitchRequest.toTeamIndex] as 'blue' | 'green' | 'red') }}>
+                  {teamNames[teamSwitchRequest.toTeamIndex]}
+                </span>
+              </p>
+              <div className="team-switch-actions">
+                <button className="btn btn-primary btn-sm" onClick={() => handleRespondTeamSwitch(true)}>
+                  Approve
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => handleRespondTeamSwitch(false)}>
+                  Deny
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Team Switch Response (for requester) */}
+        {teamSwitchResponse && teamSwitchResponse.playerId === playerId && (
+          <div className={`team-switch-response ${teamSwitchResponse.approved ? 'approved' : 'denied'}`}>
+            {teamSwitchResponse.approved
+              ? 'Your team switch request was approved!'
+              : 'Your team switch request was denied.'}
+          </div>
+        )}
+
+        {/* Teams Section */}
+        <div className="teams-section">
+          <div className="teams-header">
+            <h2>Teams</h2>
             <span className="player-count">
-              {roomInfo.players.length} / {roomInfo.maxPlayers}
+              {roomInfo.players.length} / {roomInfo.maxPlayers} players
             </span>
           </div>
 
-          <div className="players-list">
-            {roomInfo.players.map((player) => (
-              <PlayerCard
-                key={player.id}
-                player={player}
-                isHost={player.id === roomInfo.hostId}
-                isMe={player.id === playerId}
-                canKick={isHost && player.id !== playerId}
-                onKick={() => onKickPlayer(player.id)}
-              />
-            ))}
-
-            {/* Empty slots */}
-            {Array.from({ length: roomInfo.maxPlayers - roomInfo.players.length }).map((_, i) => (
-              <div key={`empty-${i}`} className="player-card empty">
-                <div className="player-avatar empty-avatar">?</div>
-                <div className="player-info">
-                  <span className="player-name">Waiting for player...</span>
+          <div className="teams-grid">
+            {Array.from(teams.entries()).map(([teamIndex, teamPlayers]) => (
+              <div key={teamIndex} className="team-card">
+                <div
+                  className="team-header"
+                  style={{
+                    backgroundColor: getTeamColorHex(teamColors[teamIndex] as 'blue' | 'green' | 'red'),
+                  }}
+                >
+                  <span className="team-name">{teamNames[teamIndex]}</span>
+                  <span className="team-letter">{getTeamLetter(teamColors[teamIndex] as 'blue' | 'green' | 'red')}</span>
                 </div>
+                <div className="team-players">
+                  {teamPlayers.map((player) => (
+                    <div
+                      key={player.id}
+                      className={`team-player ${!player.connected ? 'disconnected' : ''} ${player.ready ? 'ready' : ''}`}
+                    >
+                      <span className="player-name">
+                        {player.name}
+                        {player.id === roomInfo.hostId && <span className="host-badge">Host</span>}
+                        {player.id === playerId && <span className="me-badge">You</span>}
+                      </span>
+                      <span className={`ready-status ${player.ready ? 'is-ready' : ''}`}>
+                        {player.ready ? '✓ Ready' : 'Not Ready'}
+                      </span>
+                      {!player.connected && <span className="disconnected-badge">Offline</span>}
+                      {isHost && player.id !== playerId && (
+                        <button className="kick-button" onClick={() => onKickPlayer(player.id)} title="Kick player">
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {teamPlayers.length === 0 && (
+                    <div className="team-player empty">No players yet</div>
+                  )}
+                </div>
+                {/* Switch to this team button */}
+                {myPlayer && myPlayer.teamIndex !== teamIndex && (
+                  <button
+                    className="switch-team-btn"
+                    onClick={() => handleTeamSwitchRequest(teamIndex)}
+                  >
+                    {isHost ? 'Switch Here' : 'Request to Join'}
+                  </button>
+                )}
               </div>
             ))}
           </div>
+
+          {/* Empty slots */}
+          {roomInfo.players.length < roomInfo.maxPlayers && (
+            <div className="empty-slots">
+              Waiting for {roomInfo.maxPlayers - roomInfo.players.length} more player{roomInfo.maxPlayers - roomInfo.players.length > 1 ? 's' : ''}...
+            </div>
+          )}
         </div>
 
         {/* Game Info */}
@@ -174,56 +292,37 @@ export function LobbyScreen({
         {/* Error */}
         {error && <div className="form-error">{error}</div>}
 
-        {/* Start Button */}
+        {/* Ready Button */}
+        <button
+          className={`btn btn-lg w-full ${myPlayer?.ready ? 'btn-secondary' : 'btn-primary'}`}
+          onClick={handleToggleReady}
+        >
+          {myPlayer?.ready ? 'Cancel Ready' : 'Ready Up!'}
+        </button>
+
+        {/* Start Button (Host only) */}
         {isHost ? (
           <button
-            className="btn btn-primary btn-lg w-full"
+            className="btn btn-primary btn-lg w-full start-button"
             onClick={handleStart}
-            disabled={loading || !canStart}
+            disabled={loading || !canStart || !allPlayersReady}
           >
-            {loading ? 'Starting...' : canStart ? 'Start Game' : `Need ${findNearestValidCount(roomInfo.players.length)} players`}
+            {loading
+              ? 'Starting...'
+              : !canStart
+                ? `Need ${findNearestValidCount(roomInfo.players.length)} players`
+                : !allPlayersReady
+                  ? 'Waiting for all players to be ready'
+                  : 'Start Game'}
           </button>
         ) : (
           <div className="waiting-message">
-            Waiting for host to start the game...
+            {allPlayersReady
+              ? 'Waiting for host to start the game...'
+              : 'Waiting for all players to be ready...'}
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-interface PlayerCardProps {
-  player: PublicPlayer;
-  isHost: boolean;
-  isMe: boolean;
-  canKick: boolean;
-  onKick: () => void;
-}
-
-function PlayerCard({ player, isHost, isMe, canKick, onKick }: PlayerCardProps) {
-  return (
-    <div className={`player-card ${!player.connected ? 'disconnected' : ''}`}>
-      <div
-        className="player-avatar"
-        style={{ backgroundColor: getTeamColorHex(player.teamColor) }}
-      >
-        {getTeamLetter(player.teamColor)}
-      </div>
-      <div className="player-info">
-        <span className="player-name">
-          {player.name}
-          {isHost && <span className="host-badge">Host</span>}
-          {isMe && <span className="me-badge">You</span>}
-        </span>
-        <span className="player-team">Team {player.teamIndex + 1}</span>
-        {!player.connected && <span className="disconnected-badge">Disconnected</span>}
-      </div>
-      {canKick && (
-        <button className="kick-button" onClick={onKick} title="Kick player">
-          ✕
-        </button>
-      )}
     </div>
   );
 }

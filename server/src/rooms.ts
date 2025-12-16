@@ -59,6 +59,7 @@ function createPlayer(name: string, isHost: boolean = false): Player {
     teamIndex: 0,
     teamColor: 'blue',
     connected: true,
+    ready: isHost, // Host is automatically ready
     hand: [],
     discardPile: [],
   };
@@ -75,6 +76,7 @@ export function toPublicPlayer(player: Player): PublicPlayer {
     teamIndex: player.teamIndex,
     teamColor: player.teamColor,
     connected: player.connected,
+    ready: player.ready,
     handCount: player.hand.length,
     topDiscard: player.discardPile.length > 0
       ? player.discardPile[player.discardPile.length - 1]
@@ -89,6 +91,7 @@ export function toPublicPlayer(player: Player): PublicPlayer {
 export function toRoomInfo(room: Room): RoomInfo {
   return {
     code: room.code,
+    name: room.name,
     hostId: room.hostId,
     phase: room.phase,
     players: room.players.map(toPublicPlayer),
@@ -145,6 +148,7 @@ export function toClientGameState(gameState: GameState, playerId: string): Clien
  * Create a new room
  */
 export function createRoom(
+  roomName: string,
   hostName: string,
   maxPlayers: number,
   teamCount: number,
@@ -162,9 +166,11 @@ export function createRoom(
 
   const code = getUniqueRoomCode();
   const host = createPlayer(hostName, true);
+  const now = Date.now();
 
   const room: Room = {
     code,
+    name: roomName.trim() || `${hostName}'s Game`,
     hostId: host.id,
     phase: 'waiting',
     players: [host],
@@ -172,7 +178,8 @@ export function createRoom(
     teamCount,
     turnTimeLimit,
     gameState: null,
-    createdAt: Date.now(),
+    createdAt: now,
+    lastActivityAt: now,
   };
 
   // Assign initial team
@@ -405,12 +412,93 @@ export function reconnectPlayer(roomCode: string, playerId: string): Room | null
 }
 
 /**
- * Clean up old rooms (call periodically)
+ * Toggle player ready status
  */
-export function cleanupOldRooms(maxAgeMs: number = 24 * 60 * 60 * 1000): void {
+export function toggleReady(roomCode: string, playerId: string): Room | { error: string } {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+
+  if (room.phase !== 'waiting') {
+    return { error: 'Game already started' };
+  }
+
+  const player = room.players.find(p => p.id === playerId);
+  if (!player) return { error: 'Player not found' };
+
+  player.ready = !player.ready;
+  room.lastActivityAt = Date.now();
+
+  return room;
+}
+
+/**
+ * Check if all players are ready
+ */
+export function areAllPlayersReady(room: Room): boolean {
+  return room.players.every(p => p.ready);
+}
+
+/**
+ * Switch player to a different team (host approval required via socket events)
+ */
+export function switchPlayerTeam(
+  roomCode: string,
+  playerId: string,
+  newTeamIndex: number
+): Room | { error: string } {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+
+  if (room.phase !== 'waiting') {
+    return { error: 'Cannot switch teams after game started' };
+  }
+
+  const player = room.players.find(p => p.id === playerId);
+  if (!player) return { error: 'Player not found' };
+
+  if (newTeamIndex < 0 || newTeamIndex >= room.teamCount) {
+    return { error: 'Invalid team index' };
+  }
+
+  // Update player's team
+  const teamColors = room.teamCount === 2 ? ['blue', 'green'] : ['blue', 'green', 'red'];
+  player.teamIndex = newTeamIndex;
+  player.teamColor = teamColors[newTeamIndex] as 'blue' | 'green' | 'red';
+  room.lastActivityAt = Date.now();
+
+  return room;
+}
+
+/**
+ * Update room activity timestamp
+ */
+export function updateRoomActivity(roomCode: string): void {
+  const room = rooms.get(roomCode);
+  if (room) {
+    room.lastActivityAt = Date.now();
+  }
+}
+
+/**
+ * Clean up old rooms (call periodically)
+ * Removes rooms that have been empty (no players) for 30 minutes
+ * Or rooms that have been idle for 24 hours
+ */
+export function cleanupOldRooms(): void {
   const now = Date.now();
+  const EMPTY_ROOM_TIMEOUT = 30 * 60 * 1000; // 30 minutes for empty rooms
+  const IDLE_ROOM_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours for any room
+
   for (const [code, room] of rooms) {
-    if (now - room.createdAt > maxAgeMs) {
+    const timeSinceActivity = now - room.lastActivityAt;
+    const hasConnectedPlayers = room.players.some(p => p.connected);
+
+    // Remove empty rooms after 30 minutes of inactivity
+    const shouldRemoveEmptyRoom = !hasConnectedPlayers && timeSinceActivity > EMPTY_ROOM_TIMEOUT;
+    // Remove any room after 24 hours of inactivity
+    const shouldRemoveIdleRoom = timeSinceActivity > IDLE_ROOM_TIMEOUT;
+
+    if (shouldRemoveEmptyRoom || shouldRemoveIdleRoom) {
       // Clean up player tokens
       for (const player of room.players) {
         playerTokens.delete(player.token);

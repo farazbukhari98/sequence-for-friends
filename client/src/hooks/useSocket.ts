@@ -9,6 +9,7 @@ import type {
   MoveResult,
   CutCard,
   TurnTimeLimit,
+  TeamSwitchRequest,
 } from '../../../shared/types';
 
 type SequenceSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -21,8 +22,10 @@ interface UseSocketReturn {
   error: string | null;
   cutCards: CutCard[] | null;
   turnTimeoutInfo: { playerIndex: number; playerName: string } | null;
+  teamSwitchRequest: TeamSwitchRequest | null;
+  teamSwitchResponse: { playerId: string; approved: boolean; playerName: string } | null;
   // Actions
-  createRoom: (playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
+  createRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   joinRoom: (roomCode: string, playerName: string, token?: string) => Promise<{ roomInfo: RoomInfo; playerId: string; token: string } | { error: string }>;
   reconnect: (roomCode: string, token: string) => Promise<{ roomInfo: RoomInfo; gameState?: ClientGameState; playerId: string } | { error: string }>;
   leaveRoom: () => void;
@@ -30,8 +33,13 @@ interface UseSocketReturn {
   startGame: () => Promise<{ success: boolean; error?: string }>;
   sendAction: (action: GameAction) => Promise<MoveResult>;
   updateRoomSettings: (turnTimeLimit: TurnTimeLimit) => Promise<{ success: boolean; error?: string }>;
+  toggleReady: () => Promise<{ success: boolean; error?: string }>;
+  requestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
+  respondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
   clearError: () => void;
   clearTurnTimeoutInfo: () => void;
+  clearTeamSwitchRequest: () => void;
+  clearTeamSwitchResponse: () => void;
 }
 
 const SOCKET_URL = import.meta.env.PROD ? '' : 'http://localhost:3001';
@@ -44,6 +52,8 @@ export function useSocket(): UseSocketReturn {
   const [error, setError] = useState<string | null>(null);
   const [cutCards, setCutCards] = useState<CutCard[] | null>(null);
   const [turnTimeoutInfo, setTurnTimeoutInfo] = useState<{ playerIndex: number; playerName: string } | null>(null);
+  const [teamSwitchRequest, setTeamSwitchRequest] = useState<TeamSwitchRequest | null>(null);
+  const [teamSwitchResponse, setTeamSwitchResponse] = useState<{ playerId: string; approved: boolean; playerName: string } | null>(null);
 
   // Initialize socket connection
   useEffect(() => {
@@ -110,12 +120,23 @@ export function useSocket(): UseSocketReturn {
       setTimeout(() => setTurnTimeoutInfo(null), 3000);
     });
 
+    socket.on('team-switch-request', (request) => {
+      setTeamSwitchRequest(request);
+    });
+
+    socket.on('team-switch-response', (response) => {
+      setTeamSwitchResponse(response);
+      // Auto-clear after 5 seconds
+      setTimeout(() => setTeamSwitchResponse(null), 5000);
+    });
+
     return () => {
       socket.disconnect();
     };
   }, []);
 
   const createRoom = useCallback(async (
+    roomName: string,
     playerName: string,
     maxPlayers: number,
     teamCount: number,
@@ -127,7 +148,7 @@ export function useSocket(): UseSocketReturn {
         return;
       }
 
-      socketRef.current.emit('create-room', { playerName, maxPlayers, teamCount, turnTimeLimit }, (response) => {
+      socketRef.current.emit('create-room', { roomName, playerName, maxPlayers, teamCount, turnTimeLimit }, (response) => {
         if (response.success && response.roomCode && response.playerId && response.token) {
           resolve({
             roomCode: response.roomCode,
@@ -254,12 +275,64 @@ export function useSocket(): UseSocketReturn {
     });
   }, []);
 
+  const toggleReady = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!socketRef.current) {
+        resolve({ success: false, error: 'Not connected to server' });
+        return;
+      }
+
+      socketRef.current.emit('toggle-ready', (response) => {
+        resolve(response);
+      });
+    });
+  }, []);
+
+  const requestTeamSwitch = useCallback(async (
+    toTeamIndex: number
+  ): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!socketRef.current) {
+        resolve({ success: false, error: 'Not connected to server' });
+        return;
+      }
+
+      socketRef.current.emit('request-team-switch', toTeamIndex, (response) => {
+        resolve(response);
+      });
+    });
+  }, []);
+
+  const respondTeamSwitch = useCallback(async (
+    playerId: string,
+    approved: boolean
+  ): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!socketRef.current) {
+        resolve({ success: false, error: 'Not connected to server' });
+        return;
+      }
+
+      socketRef.current.emit('respond-team-switch', { playerId, approved }, (response) => {
+        resolve(response);
+      });
+    });
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
   const clearTurnTimeoutInfo = useCallback(() => {
     setTurnTimeoutInfo(null);
+  }, []);
+
+  const clearTeamSwitchRequest = useCallback(() => {
+    setTeamSwitchRequest(null);
+  }, []);
+
+  const clearTeamSwitchResponse = useCallback(() => {
+    setTeamSwitchResponse(null);
   }, []);
 
   return {
@@ -270,6 +343,8 @@ export function useSocket(): UseSocketReturn {
     error,
     cutCards,
     turnTimeoutInfo,
+    teamSwitchRequest,
+    teamSwitchResponse,
     createRoom,
     joinRoom,
     reconnect,
@@ -278,7 +353,12 @@ export function useSocket(): UseSocketReturn {
     startGame,
     sendAction,
     updateRoomSettings,
+    toggleReady,
+    requestTeamSwitch,
+    respondTeamSwitch,
     clearError,
     clearTurnTimeoutInfo,
+    clearTeamSwitchRequest,
+    clearTeamSwitchResponse,
   };
 }

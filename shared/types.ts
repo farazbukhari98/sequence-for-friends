@@ -88,6 +88,7 @@ export interface Player {
   teamIndex: number;
   teamColor: TeamColor;
   connected: boolean;
+  ready: boolean; // Ready to start the game
   hand: CardCode[]; // Only visible to this player on client
   discardPile: CardCode[]; // Top card visible to all
 }
@@ -100,6 +101,7 @@ export interface PublicPlayer {
   teamIndex: number;
   teamColor: TeamColor;
   connected: boolean;
+  ready: boolean;
   handCount: number;
   topDiscard: CardCode | null;
   discardCount: number;
@@ -221,6 +223,7 @@ export type RoomPhase = 'waiting' | 'in-game';
 
 export interface Room {
   code: string;
+  name: string; // Room name displayed to players
   hostId: string;
   phase: RoomPhase;
   players: Player[];
@@ -229,10 +232,12 @@ export interface Room {
   turnTimeLimit: TurnTimeLimit;
   gameState: GameState | null;
   createdAt: number;
+  lastActivityAt: number; // Track last player activity for auto-cleanup
 }
 
 export interface RoomInfo {
   code: string;
+  name: string; // Room name displayed to players
   hostId: string;
   phase: RoomPhase;
   players: PublicPlayer[];
@@ -284,9 +289,17 @@ export interface MoveResult {
 // SOCKET EVENT TYPES
 // ============================================
 
+// Team switch request
+export interface TeamSwitchRequest {
+  playerId: string;
+  playerName: string;
+  fromTeamIndex: number;
+  toTeamIndex: number;
+}
+
 // Client -> Server events
 export interface ClientToServerEvents {
-  'create-room': (data: { playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit }, callback: (response: CreateRoomResponse) => void) => void;
+  'create-room': (data: { roomName: string; playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit }, callback: (response: CreateRoomResponse) => void) => void;
   'join-room': (data: { roomCode: string; playerName: string; token?: string }, callback: (response: JoinRoomResponse) => void) => void;
   'leave-room': () => void;
   'start-game': (callback: (response: StartGameResponse) => void) => void;
@@ -294,6 +307,9 @@ export interface ClientToServerEvents {
   'game-action': (action: GameAction, callback: (response: MoveResult) => void) => void;
   'reconnect-to-room': (data: { roomCode: string; token: string }, callback: (response: ReconnectResponse) => void) => void;
   'update-room-settings': (data: { turnTimeLimit: TurnTimeLimit }, callback: (response: { success: boolean; error?: string }) => void) => void;
+  'toggle-ready': (callback: (response: { success: boolean; error?: string }) => void) => void;
+  'request-team-switch': (toTeamIndex: number, callback: (response: { success: boolean; error?: string }) => void) => void;
+  'respond-team-switch': (data: { playerId: string; approved: boolean }, callback: (response: { success: boolean; error?: string }) => void) => void;
 }
 
 // Server -> Client events
@@ -309,6 +325,8 @@ export interface ServerToClientEvents {
   'cut-result': (cutCards: CutCard[], dealerIndex: number) => void;
   'game-over': (winnerTeamIndex: number) => void;
   'turn-timeout': (data: { playerIndex: number; playerName: string }) => void;
+  'team-switch-request': (request: TeamSwitchRequest) => void;
+  'team-switch-response': (data: { playerId: string; approved: boolean; playerName: string }) => void;
 }
 
 // Response types
