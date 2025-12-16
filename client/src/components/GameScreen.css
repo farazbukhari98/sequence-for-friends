@@ -59,6 +59,13 @@
 }
 
 /* Turn Indicator */
+.turn-indicator-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .turn-indicator {
   font-weight: 600;
   font-size: 0.95rem;
@@ -76,6 +83,44 @@
 .winner-text {
   color: var(--accent-warning);
   font-size: 1.1rem;
+}
+
+/* Timeout Notification */
+.timeout-notification {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(233, 69, 96, 0.95);
+  color: white;
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--border-radius-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-weight: 500;
+  z-index: 50;
+  animation: slideDown 0.3s ease-out;
+  box-shadow: 0 4px 20px rgba(233, 69, 96, 0.4);
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateX(-50%) translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+.timeout-icon {
+  font-size: 1.2rem;
+}
+
+.timeout-text {
+  font-size: 0.9rem;
 }
 
 /* Score Display */

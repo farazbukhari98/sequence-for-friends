@@ -172,3 +172,38 @@
   background: rgba(78, 205, 196, 0.15);
   color: var(--accent-primary);
 }
+
+/* Time limit grid */
+.time-limit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+}
+
+.time-limit-btn {
+  padding: var(--space-sm) var(--space-xs);
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  font-weight: 500;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.time-limit-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-card);
+}
+
+.time-limit-btn.active {
+  border-color: var(--accent-primary);
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--accent-primary);
+}
+
+@media (max-width: 380px) {
+  .time-limit-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -8,6 +8,7 @@ import {
   GameState,
   ClientGameState,
   cellKey,
+  TurnTimeLimit,
 } from '../../shared/types.js';
 import { createGameConfig, initializeGame, assignTeams } from './gameState.js';
 
@@ -93,6 +94,7 @@ export function toRoomInfo(room: Room): RoomInfo {
     players: room.players.map(toPublicPlayer),
     maxPlayers: room.maxPlayers,
     teamCount: room.teamCount,
+    turnTimeLimit: room.turnTimeLimit,
   };
 }
 
@@ -134,6 +136,8 @@ export function toClientGameState(gameState: GameState, playerId: string): Clien
     winnerTeamIndex: gameState.winnerTeamIndex,
     lastMove: gameState.lastMove,
     cutCards: gameState.cutCards,
+    turnTimeLimit: gameState.turnTimeLimit,
+    turnStartedAt: gameState.turnStartedAt,
   };
 }
 
@@ -143,7 +147,8 @@ export function toClientGameState(gameState: GameState, playerId: string): Clien
 export function createRoom(
   hostName: string,
   maxPlayers: number,
-  teamCount: number
+  teamCount: number,
+  turnTimeLimit: TurnTimeLimit = 0
 ): { room: Room; player: Player } {
   // Validate player count
   if (!VALID_PLAYER_COUNTS.includes(maxPlayers)) {
@@ -165,6 +170,7 @@ export function createRoom(
     players: [host],
     maxPlayers,
     teamCount,
+    turnTimeLimit,
     gameState: null,
     createdAt: Date.now(),
   };
@@ -176,6 +182,29 @@ export function createRoom(
   playerTokens.set(host.token, { roomCode: code, playerId: host.id });
 
   return { room, player: host };
+}
+
+/**
+ * Update room settings (host only, before game starts)
+ */
+export function updateRoomSettings(
+  roomCode: string,
+  hostId: string,
+  settings: { turnTimeLimit: TurnTimeLimit }
+): Room | { error: string } {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+
+  if (room.hostId !== hostId) {
+    return { error: 'Only the host can change settings' };
+  }
+
+  if (room.phase !== 'waiting') {
+    return { error: 'Cannot change settings after game started' };
+  }
+
+  room.turnTimeLimit = settings.turnTimeLimit;
+  return room;
 }
 
 /**
@@ -316,8 +345,8 @@ export function startGame(roomCode: string, hostId: string): GameState | { error
   // Create game config
   const config = createGameConfig(room.players.length);
 
-  // Initialize game state
-  const gameState = initializeGame(room.players, config);
+  // Initialize game state with turn time limit
+  const gameState = initializeGame(room.players, config, room.turnTimeLimit);
 
   room.phase = 'in-game';
   room.gameState = gameState;

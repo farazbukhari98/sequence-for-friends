@@ -23,6 +23,7 @@ import {
   toRoomInfo,
   toClientGameState,
   cleanupOldRooms,
+  updateRoomSettings,
 } from './rooms.js';
 
 import { applyMove } from './rules/engine.js';
@@ -53,13 +54,96 @@ app.get('*', (req, res) => {
 // Track socket to player/room mapping
 const socketToPlayer = new Map<string, { roomCode: string; playerId: string }>();
 
+// Track turn timers per room
+const roomTimers = new Map<string, NodeJS.Timeout>();
+
+/**
+ * Clear any existing timer for a room
+ */
+function clearTurnTimer(roomCode: string): void {
+  const existingTimer = roomTimers.get(roomCode);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+    roomTimers.delete(roomCode);
+  }
+}
+
+/**
+ * Start a turn timer for a room
+ */
+function startTurnTimer(roomCode: string): void {
+  const room = getRoom(roomCode);
+  if (!room || !room.gameState || room.gameState.turnTimeLimit === 0) {
+    return;
+  }
+
+  // Clear any existing timer
+  clearTurnTimer(roomCode);
+
+  const timeLimit = room.gameState.turnTimeLimit * 1000; // Convert to milliseconds
+
+  const timer = setTimeout(() => {
+    handleTurnTimeout(roomCode);
+  }, timeLimit);
+
+  roomTimers.set(roomCode, timer);
+}
+
+/**
+ * Handle turn timeout - skip the player's turn
+ */
+function handleTurnTimeout(roomCode: string): void {
+  const room = getRoom(roomCode);
+  if (!room || !room.gameState || room.gameState.phase !== 'playing') {
+    return;
+  }
+
+  const gameState = room.gameState;
+  const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+  const playerName = currentPlayer.name;
+  const playerIndex = gameState.currentPlayerIndex;
+
+  // Skip to next player without any action
+  // Reset turn state
+  gameState.deadCardReplacedThisTurn = false;
+  gameState.pendingDraw = false;
+  gameState.lastRemovedCell = null;
+
+  // Move to next player
+  gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+
+  // Reset turn timer for next player
+  gameState.turnStartedAt = gameState.turnTimeLimit > 0 ? Date.now() : null;
+
+  // Notify all players about timeout
+  io.to(roomCode).emit('turn-timeout', { playerIndex, playerName });
+
+  // Send updated game state to all players
+  for (const player of room.players) {
+    const playerSocket = findSocketByPlayerId(player.id);
+    if (playerSocket) {
+      playerSocket.emit('game-state-updated', toClientGameState(gameState, player.id));
+    }
+  }
+
+  // Start timer for next player
+  startTurnTimer(roomCode);
+
+  console.log(`Turn timeout for ${playerName} in room ${roomCode}`);
+}
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
   // Create a new room
   socket.on('create-room', (data, callback) => {
     try {
-      const { room, player } = createRoom(data.playerName, data.maxPlayers, data.teamCount);
+      const { room, player } = createRoom(
+        data.playerName,
+        data.maxPlayers,
+        data.teamCount,
+        data.turnTimeLimit ?? 0
+      );
 
       // Join socket to room
       socket.join(room.code);
@@ -171,6 +255,29 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Update room settings (host only, before game starts)
+  socket.on('update-room-settings', (data, callback) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) {
+      callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+
+    const result = updateRoomSettings(playerInfo.roomCode, playerInfo.playerId, {
+      turnTimeLimit: data.turnTimeLimit,
+    });
+
+    if ('error' in result) {
+      callback({ success: false, error: result.error });
+      return;
+    }
+
+    callback({ success: true });
+
+    // Notify all players about the updated settings
+    io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(result));
+  });
+
   // Kick player (host only)
   socket.on('kick-player', (playerId) => {
     const playerInfo = socketToPlayer.get(socket.id);
@@ -217,6 +324,9 @@ io.on('connection', (socket) => {
           playerSocket.emit('game-started', toClientGameState(room.gameState, player.id));
         }
       }
+
+      // Start turn timer if enabled
+      startTurnTimer(playerInfo.roomCode);
     }
 
     console.log(`Game started in room ${playerInfo.roomCode}`);
@@ -236,12 +346,25 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Track the current player before the move to detect turn change
+    const previousPlayerIndex = room.gameState.currentPlayerIndex;
+
     // Apply the move
     const result = applyMove(room.gameState, playerInfo.playerId, action);
 
     callback(result);
 
     if (result.success) {
+      // Check if turn changed (player drew a card, completing their turn)
+      const turnChanged = room.gameState.currentPlayerIndex !== previousPlayerIndex;
+
+      if (turnChanged && !result.gameOver) {
+        // Update turn start time for the new player
+        room.gameState.turnStartedAt = room.gameState.turnTimeLimit > 0 ? Date.now() : null;
+        // Restart the timer for the new player
+        startTurnTimer(playerInfo.roomCode);
+      }
+
       // Send updated game state to all players
       for (const player of room.players) {
         const playerSocket = findSocketByPlayerId(player.id);
@@ -252,6 +375,8 @@ io.on('connection', (socket) => {
 
       // Check for game over
       if (result.gameOver && result.winnerTeamIndex !== undefined) {
+        // Clear timer on game over
+        clearTurnTimer(playerInfo.roomCode);
         io.to(playerInfo.roomCode).emit('game-over', result.winnerTeamIndex);
       }
     }

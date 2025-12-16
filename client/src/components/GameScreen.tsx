@@ -19,12 +19,14 @@ import {
 import { usePinchZoom } from '../hooks/usePinchZoom';
 import { Board } from './Board';
 import { Hand } from './Hand';
+import { TurnTimer } from './TurnTimer';
 import './GameScreen.css';
 
 interface GameScreenProps {
   gameState: ClientGameState;
   playerId: string;
   cutCards: CutCard[] | null;
+  turnTimeoutInfo: { playerIndex: number; playerName: string } | null;
   onAction: (action: GameAction) => Promise<MoveResult>;
   onLeave: () => void;
 }
@@ -42,6 +44,7 @@ export function GameScreen({
   gameState,
   playerId,
   cutCards,
+  turnTimeoutInfo,
   onAction,
   onLeave,
 }: GameScreenProps) {
@@ -296,15 +299,24 @@ export function GameScreen({
         </div>
 
         <div className="game-header-center">
-          <div className="turn-indicator">
-            {gameState.winnerTeamIndex !== null ? (
-              <span className="winner-text">
-                Team {gameState.config.teamColors[gameState.winnerTeamIndex].toUpperCase()} Wins!
-              </span>
-            ) : isMyTurn ? (
-              <span className="your-turn">Your Turn</span>
-            ) : (
-              <span className="waiting-turn">{currentPlayer?.name}'s Turn</span>
+          <div className="turn-indicator-wrapper">
+            <div className="turn-indicator">
+              {gameState.winnerTeamIndex !== null ? (
+                <span className="winner-text">
+                  Team {gameState.config.teamColors[gameState.winnerTeamIndex].toUpperCase()} Wins!
+                </span>
+              ) : isMyTurn ? (
+                <span className="your-turn">Your Turn</span>
+              ) : (
+                <span className="waiting-turn">{currentPlayer?.name}'s Turn</span>
+              )}
+            </div>
+            {gameState.turnTimeLimit > 0 && gameState.winnerTeamIndex === null && (
+              <TurnTimer
+                turnTimeLimit={gameState.turnTimeLimit}
+                turnStartedAt={gameState.turnStartedAt}
+                isMyTurn={isMyTurn}
+              />
             )}
           </div>
         </div>
@@ -394,6 +406,14 @@ export function GameScreen({
         onCardSelect={handleCardSelect}
         onReplaceDeadCard={handleReplaceDeadCard}
       />
+
+      {/* Turn Timeout Notification */}
+      {turnTimeoutInfo && (
+        <div className="timeout-notification">
+          <span className="timeout-icon">⏰</span>
+          <span className="timeout-text">{turnTimeoutInfo.playerName}'s turn timed out</span>
+        </div>
+      )}
 
       {/* Cut Cards Modal */}
       {showCutCards && cutCards && (

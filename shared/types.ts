@@ -125,6 +125,20 @@ export interface SequenceLine {
 
 export type GamePhase = 'lobby' | 'cutting' | 'playing' | 'finished';
 
+// ============================================
+// TURN TIME LIMIT
+// ============================================
+
+export type TurnTimeLimit = 0 | 30 | 60 | 90 | 120; // 0 = no limit, values in seconds
+
+export const TURN_TIME_OPTIONS: { value: TurnTimeLimit; label: string }[] = [
+  { value: 0, label: 'No Limit' },
+  { value: 30, label: '30 seconds' },
+  { value: 60, label: '1 minute' },
+  { value: 90, label: '90 seconds' },
+  { value: 120, label: '2 minutes' },
+];
+
 export interface GameConfig {
   playerCount: number;
   teamCount: number; // 2 or 3
@@ -193,6 +207,10 @@ export interface GameState {
 
   // Last move for display
   lastMove: MoveResult | null;
+
+  // Turn timer
+  turnTimeLimit: TurnTimeLimit;
+  turnStartedAt: number | null; // Timestamp when current turn started
 }
 
 // ============================================
@@ -208,6 +226,7 @@ export interface Room {
   players: Player[];
   maxPlayers: number;
   teamCount: number;
+  turnTimeLimit: TurnTimeLimit;
   gameState: GameState | null;
   createdAt: number;
 }
@@ -219,6 +238,7 @@ export interface RoomInfo {
   players: PublicPlayer[];
   maxPlayers: number;
   teamCount: number;
+  turnTimeLimit: TurnTimeLimit;
 }
 
 // ============================================
@@ -266,13 +286,14 @@ export interface MoveResult {
 
 // Client -> Server events
 export interface ClientToServerEvents {
-  'create-room': (data: { playerName: string; maxPlayers: number; teamCount: number }, callback: (response: CreateRoomResponse) => void) => void;
+  'create-room': (data: { playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit }, callback: (response: CreateRoomResponse) => void) => void;
   'join-room': (data: { roomCode: string; playerName: string; token?: string }, callback: (response: JoinRoomResponse) => void) => void;
   'leave-room': () => void;
   'start-game': (callback: (response: StartGameResponse) => void) => void;
   'kick-player': (playerId: string) => void;
   'game-action': (action: GameAction, callback: (response: MoveResult) => void) => void;
   'reconnect-to-room': (data: { roomCode: string; token: string }, callback: (response: ReconnectResponse) => void) => void;
+  'update-room-settings': (data: { turnTimeLimit: TurnTimeLimit }, callback: (response: { success: boolean; error?: string }) => void) => void;
 }
 
 // Server -> Client events
@@ -287,6 +308,7 @@ export interface ServerToClientEvents {
   'error': (message: string) => void;
   'cut-result': (cutCards: CutCard[], dealerIndex: number) => void;
   'game-over': (winnerTeamIndex: number) => void;
+  'turn-timeout': (data: { playerIndex: number; playerName: string }) => void;
 }
 
 // Response types
@@ -339,6 +361,9 @@ export interface ClientGameState {
   winnerTeamIndex: number | null;
   lastMove: MoveResult | null;
   cutCards?: CutCard[];
+  // Turn timer
+  turnTimeLimit: TurnTimeLimit;
+  turnStartedAt: number | null;
 }
 
 // ============================================

@@ -4,6 +4,7 @@ import { HomeScreen } from './components/HomeScreen';
 import { LobbyScreen } from './components/LobbyScreen';
 import { GameScreen } from './components/GameScreen';
 import { Toast } from './components/Toast';
+import type { TurnTimeLimit } from '../../shared/types';
 
 type Screen = 'home' | 'lobby' | 'game';
 
@@ -24,6 +25,7 @@ function App() {
     gameState,
     error,
     cutCards,
+    turnTimeoutInfo,
     createRoom,
     joinRoom,
     reconnect,
@@ -31,6 +33,7 @@ function App() {
     kickPlayer,
     startGame,
     sendAction,
+    updateRoomSettings,
     clearError,
   } = useSocket();
 
@@ -83,8 +86,8 @@ function App() {
   };
 
   // Handle creating a room
-  const handleCreateRoom = async (playerName: string, maxPlayers: number, teamCount: number) => {
-    const result = await createRoom(playerName, maxPlayers, teamCount);
+  const handleCreateRoom = async (playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit) => {
+    const result = await createRoom(playerName, maxPlayers, teamCount, turnTimeLimit);
     if ('error' in result) {
       return result;
     }
@@ -157,6 +160,7 @@ function App() {
           onLeave={handleLeaveRoom}
           onKickPlayer={kickPlayer}
           onStartGame={handleStartGame}
+          onUpdateSettings={updateRoomSettings}
         />
       )}
 
@@ -165,6 +169,7 @@ function App() {
           gameState={gameState}
           playerId={playerId}
           cutCards={cutCards}
+          turnTimeoutInfo={turnTimeoutInfo}
           onAction={sendAction}
           onLeave={handleLeaveRoom}
         />

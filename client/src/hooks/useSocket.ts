@@ -8,6 +8,7 @@ import type {
   GameAction,
   MoveResult,
   CutCard,
+  TurnTimeLimit,
 } from '../../../shared/types';
 
 type SequenceSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -19,15 +20,18 @@ interface UseSocketReturn {
   gameState: ClientGameState | null;
   error: string | null;
   cutCards: CutCard[] | null;
+  turnTimeoutInfo: { playerIndex: number; playerName: string } | null;
   // Actions
-  createRoom: (playerName: string, maxPlayers: number, teamCount: number) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
+  createRoom: (playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   joinRoom: (roomCode: string, playerName: string, token?: string) => Promise<{ roomInfo: RoomInfo; playerId: string; token: string } | { error: string }>;
   reconnect: (roomCode: string, token: string) => Promise<{ roomInfo: RoomInfo; gameState?: ClientGameState; playerId: string } | { error: string }>;
   leaveRoom: () => void;
   kickPlayer: (playerId: string) => void;
   startGame: () => Promise<{ success: boolean; error?: string }>;
   sendAction: (action: GameAction) => Promise<MoveResult>;
+  updateRoomSettings: (turnTimeLimit: TurnTimeLimit) => Promise<{ success: boolean; error?: string }>;
   clearError: () => void;
+  clearTurnTimeoutInfo: () => void;
 }
 
 const SOCKET_URL = import.meta.env.PROD ? '' : 'http://localhost:3001';
@@ -39,6 +43,7 @@ export function useSocket(): UseSocketReturn {
   const [gameState, setGameState] = useState<ClientGameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cutCards, setCutCards] = useState<CutCard[] | null>(null);
+  const [turnTimeoutInfo, setTurnTimeoutInfo] = useState<{ playerIndex: number; playerName: string } | null>(null);
 
   // Initialize socket connection
   useEffect(() => {
@@ -99,6 +104,12 @@ export function useSocket(): UseSocketReturn {
       // Game state update will include winner
     });
 
+    socket.on('turn-timeout', (data) => {
+      setTurnTimeoutInfo(data);
+      // Auto-clear after 3 seconds
+      setTimeout(() => setTurnTimeoutInfo(null), 3000);
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -107,7 +118,8 @@ export function useSocket(): UseSocketReturn {
   const createRoom = useCallback(async (
     playerName: string,
     maxPlayers: number,
-    teamCount: number
+    teamCount: number,
+    turnTimeLimit: TurnTimeLimit = 0
   ): Promise<{ roomCode: string; playerId: string; token: string } | { error: string }> => {
     return new Promise((resolve) => {
       if (!socketRef.current) {
@@ -115,7 +127,7 @@ export function useSocket(): UseSocketReturn {
         return;
       }
 
-      socketRef.current.emit('create-room', { playerName, maxPlayers, teamCount }, (response) => {
+      socketRef.current.emit('create-room', { playerName, maxPlayers, teamCount, turnTimeLimit }, (response) => {
         if (response.success && response.roomCode && response.playerId && response.token) {
           resolve({
             roomCode: response.roomCode,
@@ -227,8 +239,27 @@ export function useSocket(): UseSocketReturn {
     });
   }, []);
 
+  const updateRoomSettings = useCallback(async (
+    turnTimeLimit: TurnTimeLimit
+  ): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!socketRef.current) {
+        resolve({ success: false, error: 'Not connected to server' });
+        return;
+      }
+
+      socketRef.current.emit('update-room-settings', { turnTimeLimit }, (response) => {
+        resolve(response);
+      });
+    });
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
+  }, []);
+
+  const clearTurnTimeoutInfo = useCallback(() => {
+    setTurnTimeoutInfo(null);
   }, []);
 
   return {
@@ -238,6 +269,7 @@ export function useSocket(): UseSocketReturn {
     gameState,
     error,
     cutCards,
+    turnTimeoutInfo,
     createRoom,
     joinRoom,
     reconnect,
@@ -245,6 +277,8 @@ export function useSocket(): UseSocketReturn {
     kickPlayer,
     startGame,
     sendAction,
+    updateRoomSettings,
     clearError,
+    clearTurnTimeoutInfo,
   };
 }

@@ -253,3 +253,45 @@
 .back-button:hover {
   color: var(--accent-primary);
 }
+
+/* Settings Section (Host Only) */
+.settings-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md);
+}
+
+.settings-section h3 {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.time-limit-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.time-option-btn {
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.time-option-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-card);
+}
+
+.time-option-btn.active {
+  border-color: var(--accent-primary);
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--accent-primary);
+}

@@ -10,6 +10,7 @@ import {
   TEAM_COLORS_3,
   getTeamCount,
   getRankValue,
+  TurnTimeLimit,
 } from '../../shared/types.js';
 
 import { createDeck, shuffleDeck, dealCards, cutCard } from './rules/deck.js';
@@ -74,7 +75,11 @@ export function performCut(players: Player[]): { cutCards: CutCard[]; dealerInde
 /**
  * Initialize a new game state from room players
  */
-export function initializeGame(players: Player[], config: GameConfig): GameState {
+export function initializeGame(
+  players: Player[],
+  config: GameConfig,
+  turnTimeLimit: TurnTimeLimit = 0
+): GameState {
   // Perform the cut
   const { cutCards, dealerIndex } = performCut(players);
 
@@ -107,6 +112,8 @@ export function initializeGame(players: Player[], config: GameConfig): GameState
     cutCards,
     winnerTeamIndex: null,
     lastMove: null,
+    turnTimeLimit,
+    turnStartedAt: turnTimeLimit > 0 ? Date.now() : null,
   };
 }
 

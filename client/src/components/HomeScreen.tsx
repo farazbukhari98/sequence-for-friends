@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { VALID_PLAYER_COUNTS } from '../../../shared/types';
+import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, TurnTimeLimit } from '../../../shared/types';
 import './HomeScreen.css';
 
 interface HomeScreenProps {
-  onCreateRoom: (playerName: string, maxPlayers: number, teamCount: number) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
+  onCreateRoom: (playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
   onJoinRoom: (roomCode: string, playerName: string) => Promise<{ roomInfo?: unknown; playerId?: string; token?: string; error?: string }>;
 }
 
@@ -12,6 +12,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(2);
+  const [turnTimeLimit, setTurnTimeLimit] = useState<TurnTimeLimit>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +28,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
     // Determine team count based on player count
     const teamCount = maxPlayers <= 3 ? maxPlayers : (maxPlayers % 2 === 0 ? 2 : 3);
 
-    const result = await onCreateRoom(playerName.trim(), maxPlayers, teamCount);
+    const result = await onCreateRoom(playerName.trim(), maxPlayers, teamCount, turnTimeLimit);
     setLoading(false);
 
     if (result.error) {
@@ -129,6 +130,26 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
           {maxPlayers <= 3
             ? `${maxPlayers} individual players`
             : `${maxPlayers} players in ${maxPlayers % 2 === 0 ? '2' : '3'} teams`}
+        </p>
+      </div>
+
+      <div className="form-group">
+        <label htmlFor="turnTimeLimit">Turn Time Limit</label>
+        <div className="time-limit-grid">
+          {TURN_TIME_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              className={`time-limit-btn ${turnTimeLimit === option.value ? 'active' : ''}`}
+              onClick={() => setTurnTimeLimit(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="form-hint">
+          {turnTimeLimit === 0
+            ? 'Players can take as long as they want'
+            : `Players have ${turnTimeLimit} seconds per turn`}
         </p>
       </div>
 

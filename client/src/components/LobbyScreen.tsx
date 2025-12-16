@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { RoomInfo, PublicPlayer } from '../../../shared/types';
-import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS } from '../../../shared/types';
+import type { RoomInfo, PublicPlayer, TurnTimeLimit } from '../../../shared/types';
+import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS } from '../../../shared/types';
 import './LobbyScreen.css';
 
 interface LobbyScreenProps {
@@ -9,6 +9,7 @@ interface LobbyScreenProps {
   onLeave: () => void;
   onKickPlayer: (playerId: string) => void;
   onStartGame: () => Promise<{ success: boolean; error?: string }>;
+  onUpdateSettings: (turnTimeLimit: TurnTimeLimit) => Promise<{ success: boolean; error?: string }>;
 }
 
 export function LobbyScreen({
@@ -17,6 +18,7 @@ export function LobbyScreen({
   onLeave,
   onKickPlayer,
   onStartGame,
+  onUpdateSettings,
 }: LobbyScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +145,31 @@ export function LobbyScreen({
               {roomInfo.teamCount === 2 ? '2 sequences' : '1 sequence'}
             </span>
           </div>
+          <div className="info-item">
+            <span className="info-label">Turn Timer</span>
+            <span className="info-value">
+              {roomInfo.turnTimeLimit === 0 ? 'No Limit' : `${roomInfo.turnTimeLimit}s`}
+            </span>
+          </div>
         </div>
+
+        {/* Turn Time Limit Setting (Host Only) */}
+        {isHost && (
+          <div className="settings-section">
+            <h3>Turn Timer</h3>
+            <div className="time-limit-options">
+              {TURN_TIME_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  className={`time-option-btn ${roomInfo.turnTimeLimit === option.value ? 'active' : ''}`}
+                  onClick={() => onUpdateSettings(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Error */}
         {error && <div className="form-error">{error}</div>}
