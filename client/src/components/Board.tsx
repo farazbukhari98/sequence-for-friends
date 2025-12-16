@@ -155,13 +155,17 @@ function BoardCell({
         </div>
       )}
 
-      {/* Chip */}
+      {/* Chip - shows card info so players can see what's underneath */}
       {chipColor && !showRemovalPreview && (
         <div
           className={`chip ${isLocked ? 'locked' : ''}`}
           style={{ backgroundColor: getTeamColorHex(chipColor) }}
         >
-          <span className="chip-letter">{getTeamLetter(chipColor)}</span>
+          <span className="chip-rank">{rankDisplay}</span>
+          <span className="chip-suit" style={{ color: isRed ? '#ff6b6b' : 'rgba(255,255,255,0.9)' }}>
+            {suitSymbol}
+          </span>
+          <span className="chip-team">{getTeamLetter(chipColor)}</span>
         </div>
       )}
 
@@ -171,7 +175,11 @@ function BoardCell({
           className="chip preview"
           style={{ backgroundColor: getTeamColorHex(previewTeamColor) }}
         >
-          <span className="chip-letter">{getTeamLetter(previewTeamColor)}</span>
+          <span className="chip-rank">{rankDisplay}</span>
+          <span className="chip-suit" style={{ color: isRed ? '#ff6b6b' : 'rgba(255,255,255,0.9)' }}>
+            {suitSymbol}
+          </span>
+          <span className="chip-team">{getTeamLetter(previewTeamColor)}</span>
         </div>
       )}
 
@@ -181,7 +189,11 @@ function BoardCell({
           className="chip removing"
           style={{ backgroundColor: getTeamColorHex(chipColor) }}
         >
-          <span className="chip-letter">{getTeamLetter(chipColor)}</span>
+          <span className="chip-rank">{rankDisplay}</span>
+          <span className="chip-suit" style={{ color: isRed ? '#ff6b6b' : 'rgba(255,255,255,0.9)' }}>
+            {suitSymbol}
+          </span>
+          <span className="chip-team">{getTeamLetter(chipColor)}</span>
           <span className="remove-x">✕</span>
         </div>
       )}
