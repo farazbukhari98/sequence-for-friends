@@ -9,6 +9,8 @@ import {
   ClientGameState,
   cellKey,
   TurnTimeLimit,
+  SequencesToWin,
+  DEFAULT_SEQUENCES_TO_WIN,
 } from '../../shared/types.js';
 import { createGameConfig, initializeGame, assignTeams } from './gameState.js';
 
@@ -98,6 +100,7 @@ export function toRoomInfo(room: Room): RoomInfo {
     maxPlayers: room.maxPlayers,
     teamCount: room.teamCount,
     turnTimeLimit: room.turnTimeLimit,
+    sequencesToWin: room.sequencesToWin,
   };
 }
 
@@ -152,7 +155,8 @@ export function createRoom(
   hostName: string,
   maxPlayers: number,
   teamCount: number,
-  turnTimeLimit: TurnTimeLimit = 0
+  turnTimeLimit: TurnTimeLimit = 0,
+  sequencesToWin: SequencesToWin = DEFAULT_SEQUENCES_TO_WIN
 ): { room: Room; player: Player } {
   // Validate player count
   if (!VALID_PLAYER_COUNTS.includes(maxPlayers)) {
@@ -162,6 +166,11 @@ export function createRoom(
   // Validate team count for player count
   if (maxPlayers > 3 && maxPlayers % teamCount !== 0) {
     throw new Error(`Player count ${maxPlayers} must be divisible by team count ${teamCount}`);
+  }
+
+  // Validate sequences to win
+  if (![2, 3, 4].includes(sequencesToWin)) {
+    throw new Error(`Invalid sequences to win: ${sequencesToWin}. Must be 2, 3, or 4`);
   }
 
   const code = getUniqueRoomCode();
@@ -177,6 +186,7 @@ export function createRoom(
     maxPlayers,
     teamCount,
     turnTimeLimit,
+    sequencesToWin,
     gameState: null,
     createdAt: now,
     lastActivityAt: now,
@@ -197,7 +207,7 @@ export function createRoom(
 export function updateRoomSettings(
   roomCode: string,
   hostId: string,
-  settings: { turnTimeLimit: TurnTimeLimit }
+  settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }
 ): Room | { error: string } {
   const room = rooms.get(roomCode);
   if (!room) return { error: 'Room not found' };
@@ -210,7 +220,18 @@ export function updateRoomSettings(
     return { error: 'Cannot change settings after game started' };
   }
 
-  room.turnTimeLimit = settings.turnTimeLimit;
+  if (settings.turnTimeLimit !== undefined) {
+    room.turnTimeLimit = settings.turnTimeLimit;
+  }
+
+  if (settings.sequencesToWin !== undefined) {
+    // Validate sequences to win
+    if (![2, 3, 4].includes(settings.sequencesToWin)) {
+      return { error: `Invalid sequences to win: ${settings.sequencesToWin}. Must be 2, 3, or 4` };
+    }
+    room.sequencesToWin = settings.sequencesToWin;
+  }
+
   return room;
 }
 
@@ -349,8 +370,8 @@ export function startGame(roomCode: string, hostId: string): GameState | { error
     return { error: `Invalid player count: ${room.players.length}. Need one of: ${VALID_PLAYER_COUNTS.join(', ')}` };
   }
 
-  // Create game config
-  const config = createGameConfig(room.players.length);
+  // Create game config with room's sequencesToWin setting
+  const config = createGameConfig(room.players.length, room.sequencesToWin);
 
   // Initialize game state with turn time limit
   const gameState = initializeGame(room.players, config, room.turnTimeLimit);

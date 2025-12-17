@@ -9,6 +9,7 @@ import type {
   MoveResult,
   CutCard,
   TurnTimeLimit,
+  SequencesToWin,
   TeamSwitchRequest,
 } from '../../../shared/types';
 
@@ -25,14 +26,14 @@ interface UseSocketReturn {
   teamSwitchRequest: TeamSwitchRequest | null;
   teamSwitchResponse: { playerId: string; approved: boolean; playerName: string } | null;
   // Actions
-  createRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
+  createRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit, sequencesToWin?: SequencesToWin) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   joinRoom: (roomCode: string, playerName: string, token?: string) => Promise<{ roomInfo: RoomInfo; playerId: string; token: string } | { error: string }>;
   reconnect: (roomCode: string, token: string) => Promise<{ roomInfo: RoomInfo; gameState?: ClientGameState; playerId: string } | { error: string }>;
   leaveRoom: () => void;
   kickPlayer: (playerId: string) => void;
   startGame: () => Promise<{ success: boolean; error?: string }>;
   sendAction: (action: GameAction) => Promise<MoveResult>;
-  updateRoomSettings: (turnTimeLimit: TurnTimeLimit) => Promise<{ success: boolean; error?: string }>;
+  updateRoomSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }) => Promise<{ success: boolean; error?: string }>;
   toggleReady: () => Promise<{ success: boolean; error?: string }>;
   requestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
   respondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -110,7 +111,7 @@ export function useSocket(): UseSocketReturn {
       // Room update will be sent separately
     });
 
-    socket.on('game-over', (_winnerTeamIndex) => {
+    socket.on('game-over', (_winnerTeamIndex, _stalemate) => {
       // Game state update will include winner
     });
 
@@ -140,7 +141,8 @@ export function useSocket(): UseSocketReturn {
     playerName: string,
     maxPlayers: number,
     teamCount: number,
-    turnTimeLimit: TurnTimeLimit = 0
+    turnTimeLimit: TurnTimeLimit = 0,
+    sequencesToWin?: SequencesToWin
   ): Promise<{ roomCode: string; playerId: string; token: string } | { error: string }> => {
     return new Promise((resolve) => {
       if (!socketRef.current) {
@@ -148,7 +150,7 @@ export function useSocket(): UseSocketReturn {
         return;
       }
 
-      socketRef.current.emit('create-room', { roomName, playerName, maxPlayers, teamCount, turnTimeLimit }, (response) => {
+      socketRef.current.emit('create-room', { roomName, playerName, maxPlayers, teamCount, turnTimeLimit, sequencesToWin }, (response) => {
         if (response.success && response.roomCode && response.playerId && response.token) {
           resolve({
             roomCode: response.roomCode,
@@ -261,7 +263,7 @@ export function useSocket(): UseSocketReturn {
   }, []);
 
   const updateRoomSettings = useCallback(async (
-    turnTimeLimit: TurnTimeLimit
+    settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }
   ): Promise<{ success: boolean; error?: string }> => {
     return new Promise((resolve) => {
       if (!socketRef.current) {
@@ -269,7 +271,7 @@ export function useSocket(): UseSocketReturn {
         return;
       }
 
-      socketRef.current.emit('update-room-settings', { turnTimeLimit }, (response) => {
+      socketRef.current.emit('update-room-settings', settings, (response) => {
         resolve(response);
       });
     });

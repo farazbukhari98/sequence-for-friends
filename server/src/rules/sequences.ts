@@ -127,11 +127,12 @@ export function getSequencesThroughCell(
 /**
  * Check if a sequence overlaps too much with existing locked cells
  * Returns true if the sequence is valid (overlaps at most 1 non-corner cell)
+ *
+ * Rule: Each new sequence can share at most 1 non-corner chip with ALL previous sequences combined.
  */
 function isValidSequenceOverlap(
   sequence: SequenceLine,
-  lockedCells: Set<string>,
-  teamIndex: number
+  lockedCells: Set<string>
 ): boolean {
   let nonCornerOverlap = 0;
 
@@ -143,7 +144,7 @@ function isValidSequenceOverlap(
     }
   }
 
-  // For the overlap rule: second sequence can share at most ONE non-corner cell
+  // Each new sequence can share at most ONE non-corner cell with ALL previous sequences
   return nonCornerOverlap <= 1;
 }
 
@@ -174,10 +175,11 @@ export function detectNewSequences(
 
     if (allLocked) continue; // This sequence was already counted
 
-    // For 2-sequence mode, validate overlap rule
-    if (sequencesToWin === 2 && sequencesCompleted > 0) {
-      if (!isValidSequenceOverlap(seq, lockedCells, teamIndex)) {
-        continue; // Too much overlap with previous sequence
+    // Apply overlap rule if the team has previous sequences
+    // The rule applies for ALL multi-sequence games (2, 3, or 4 to win)
+    if (sequencesCompleted > 0) {
+      if (!isValidSequenceOverlap(seq, lockedCells)) {
+        continue; // Too much overlap with previous sequences
       }
     }
 

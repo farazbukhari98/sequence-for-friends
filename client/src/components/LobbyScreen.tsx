@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { RoomInfo, PublicPlayer, TurnTimeLimit, TeamSwitchRequest } from '../../../shared/types';
-import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS } from '../../../shared/types';
+import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, TeamSwitchRequest } from '../../../shared/types';
+import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS } from '../../../shared/types';
 import './LobbyScreen.css';
 
 interface LobbyScreenProps {
@@ -11,7 +11,7 @@ interface LobbyScreenProps {
   onLeave: () => void;
   onKickPlayer: (playerId: string) => void;
   onStartGame: () => Promise<{ success: boolean; error?: string }>;
-  onUpdateSettings: (turnTimeLimit: TurnTimeLimit) => Promise<{ success: boolean; error?: string }>;
+  onUpdateSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }) => Promise<{ success: boolean; error?: string }>;
   onToggleReady: () => Promise<{ success: boolean; error?: string }>;
   onRequestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
   onRespondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -105,6 +105,20 @@ export function LobbyScreen({
     if (!teamSwitchRequest) return;
     await onRespondTeamSwitch(teamSwitchRequest.playerId, approved);
     onClearTeamSwitchRequest();
+  };
+
+  const handleUpdateTurnTimeLimit = async (value: TurnTimeLimit) => {
+    const result = await onUpdateSettings({ turnTimeLimit: value });
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleUpdateSequencesToWin = async (value: SequencesToWin) => {
+    const result = await onUpdateSettings({ sequencesToWin: value });
+    if (result.error) {
+      setError(result.error);
+    }
   };
 
   // Get teams for display
@@ -260,7 +274,7 @@ export function LobbyScreen({
           <div className="info-item">
             <span className="info-label">To Win</span>
             <span className="info-value">
-              {roomInfo.teamCount === 2 ? '2 sequences' : '1 sequence'}
+              {roomInfo.sequencesToWin} sequence{roomInfo.sequencesToWin > 1 ? 's' : ''}
             </span>
           </div>
           <div className="info-item">
@@ -271,20 +285,42 @@ export function LobbyScreen({
           </div>
         </div>
 
-        {/* Turn Time Limit Setting (Host Only) */}
+        {/* Game Settings (Host Only) */}
         {isHost && (
           <div className="settings-section">
-            <h3>Turn Timer</h3>
-            <div className="time-limit-options">
-              {TURN_TIME_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  className={`time-option-btn ${roomInfo.turnTimeLimit === option.value ? 'active' : ''}`}
-                  onClick={() => onUpdateSettings(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
+            <h3>Game Settings</h3>
+
+            <div className="setting-group">
+              <label className="setting-label">Sequences to Win</label>
+              <div className="sequences-options">
+                {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`sequences-option-btn ${roomInfo.sequencesToWin === option.value ? 'active' : ''}`}
+                    onClick={() => handleUpdateSequencesToWin(option.value)}
+                  >
+                    {option.value}
+                  </button>
+                ))}
+              </div>
+              <p className="setting-hint">
+                First team to complete {roomInfo.sequencesToWin} sequence{roomInfo.sequencesToWin > 1 ? 's' : ''} wins
+              </p>
+            </div>
+
+            <div className="setting-group">
+              <label className="setting-label">Turn Timer</label>
+              <div className="time-limit-options">
+                {TURN_TIME_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`time-option-btn ${roomInfo.turnTimeLimit === option.value ? 'active' : ''}`}
+                    onClick={() => handleUpdateTurnTimeLimit(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}

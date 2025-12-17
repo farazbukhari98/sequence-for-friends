@@ -151,7 +151,8 @@ io.on('connection', (socket) => {
         data.playerName,
         data.maxPlayers,
         data.teamCount,
-        data.turnTimeLimit ?? 0
+        data.turnTimeLimit ?? 0,
+        data.sequencesToWin // Pass sequencesToWin to createRoom
       );
 
       // Join socket to room
@@ -170,7 +171,7 @@ io.on('connection', (socket) => {
       // Send room info to the creator
       socket.emit('room-updated', roomInfo);
 
-      console.log(`Room "${room.name}" (${room.code}) created by ${player.name}`);
+      console.log(`Room "${room.name}" (${room.code}) created by ${player.name} - ${room.sequencesToWin} sequences to win`);
     } catch (error) {
       callback({
         success: false,
@@ -274,6 +275,7 @@ io.on('connection', (socket) => {
 
     const result = updateRoomSettings(playerInfo.roomCode, playerInfo.playerId, {
       turnTimeLimit: data.turnTimeLimit,
+      sequencesToWin: data.sequencesToWin, // Pass sequencesToWin to updateRoomSettings
     });
 
     if ('error' in result) {
@@ -526,7 +528,7 @@ io.on('connection', (socket) => {
       if (result.gameOver && result.winnerTeamIndex !== undefined) {
         // Clear timer on game over
         clearTurnTimer(playerInfo.roomCode);
-        io.to(playerInfo.roomCode).emit('game-over', result.winnerTeamIndex);
+        io.to(playerInfo.roomCode).emit('game-over', result.winnerTeamIndex, result.stalemate);
       }
     }
   });

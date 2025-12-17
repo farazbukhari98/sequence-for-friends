@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, TurnTimeLimit } from '../../../shared/types';
+import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN } from '../../../shared/types';
 import './HomeScreen.css';
 
 interface HomeScreenProps {
-  onCreateRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
+  onCreateRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit, sequencesToWin: SequencesToWin) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
   onJoinRoom: (roomCode: string, playerName: string) => Promise<{ roomInfo?: unknown; playerId?: string; token?: string; error?: string }>;
 }
 
@@ -14,6 +14,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
   const [roomCode, setRoomCode] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(2);
   const [turnTimeLimit, setTurnTimeLimit] = useState<TurnTimeLimit>(0);
+  const [sequencesToWin, setSequencesToWin] = useState<SequencesToWin>(DEFAULT_SEQUENCES_TO_WIN);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +31,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
     const teamCount = maxPlayers <= 3 ? maxPlayers : (maxPlayers % 2 === 0 ? 2 : 3);
 
     // Use room name if provided, otherwise default will be set by server
-    const result = await onCreateRoom(roomName.trim(), playerName.trim(), maxPlayers, teamCount, turnTimeLimit);
+    const result = await onCreateRoom(roomName.trim(), playerName.trim(), maxPlayers, teamCount, turnTimeLimit, sequencesToWin);
     setLoading(false);
 
     if (result.error) {
@@ -146,6 +147,24 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
           {maxPlayers <= 3
             ? `${maxPlayers} individual players`
             : `${maxPlayers} players in ${maxPlayers % 2 === 0 ? '2' : '3'} teams`}
+        </p>
+      </div>
+
+      <div className="form-group">
+        <label htmlFor="sequencesToWin">Sequences to Win</label>
+        <div className="sequences-to-win-grid">
+          {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              className={`sequences-btn ${sequencesToWin === option.value ? 'active' : ''}`}
+              onClick={() => setSequencesToWin(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="form-hint">
+          First team to complete {sequencesToWin} sequence{sequencesToWin > 1 ? 's' : ''} wins
         </p>
       </div>
 

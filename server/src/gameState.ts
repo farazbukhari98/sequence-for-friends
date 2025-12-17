@@ -11,24 +11,30 @@ import {
   getTeamCount,
   getRankValue,
   TurnTimeLimit,
+  SequencesToWin,
+  DEFAULT_SEQUENCES_TO_WIN,
 } from '../../shared/types.js';
 
 import { createDeck, shuffleDeck, dealCards, cutCard } from './rules/deck.js';
 
 /**
  * Create the initial game configuration based on player count
+ * @param playerCount - Number of players
+ * @param sequencesToWin - Optional override for sequences needed to win (default: 2)
  */
-export function createGameConfig(playerCount: number): GameConfig {
+export function createGameConfig(
+  playerCount: number,
+  sequencesToWin?: SequencesToWin
+): GameConfig {
   const teamCount = getTeamCount(playerCount);
   const teamColors = teamCount === 2 ? TEAM_COLORS_2 : TEAM_COLORS_3;
-  const sequencesToWin = teamCount === 2 ? 2 : 1;
   const handSize = HAND_SIZES[playerCount];
 
   return {
     playerCount,
     teamCount,
     teamColors,
-    sequencesToWin,
+    sequencesToWin: sequencesToWin ?? DEFAULT_SEQUENCES_TO_WIN,
     handSize,
   };
 }
@@ -114,6 +120,7 @@ export function initializeGame(
     lastMove: null,
     turnTimeLimit,
     turnStartedAt: turnTimeLimit > 0 ? Date.now() : null,
+    sequenceTimestamps: new Map(), // For stalemate tie-breaker
   };
 }
 

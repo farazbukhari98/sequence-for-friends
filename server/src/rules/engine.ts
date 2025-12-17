@@ -7,6 +7,7 @@ import {
   CardCode,
   BoardChips,
   SequenceLine,
+  StalemateResult,
   BOARD_LAYOUT,
   isJack,
   getJackType,
@@ -17,6 +18,14 @@ import {
 
 import { drawCard, reshuffleDiscards } from './deck.js';
 import { detectNewSequences, isCellLocked, lockSequenceCells } from './sequences.js';
+
+// Direction vectors for checking sequences (matching sequences.ts)
+const DIRECTIONS: [number, number][] = [
+  [0, 1],   // Horizontal right
+  [1, 0],   // Vertical down
+  [1, 1],   // Diagonal down-right
+  [1, -1],  // Diagonal down-left
+];
 
 /**
  * Check if a card is dead (both board positions occupied)
@@ -182,6 +191,213 @@ export function isLegalMove(
 }
 
 /**
+ * Get a line of 5 cells starting from position in direction
+ */
+function getLineOfFive(
+  startRow: number,
+  startCol: number,
+  dRow: number,
+  dCol: number
+): [number, number][] | null {
+  const cells: [number, number][] = [];
+
+  for (let i = 0; i < 5; i++) {
+    const row = startRow + i * dRow;
+    const col = startCol + i * dCol;
+
+    if (row < 0 || row >= 10 || col < 0 || col >= 10) {
+      return null; // Line goes off board
+    }
+
+    cells.push([row, col]);
+  }
+
+  return cells;
+}
+
+/**
+ * Check if a team can potentially complete a line as a valid sequence
+ */
+function canCompleteLineAsSequence(
+  line: [number, number][],
+  boardChips: BoardChips,
+  teamIndex: number,
+  lockedCells: Set<string>,
+  sequencesCompleted: number,
+  allLockedCells: Map<number, Set<string>>
+): boolean {
+  let overlapWithPrevious = 0;
+  let alreadyLockedCells = 0;
+
+  for (const [row, col] of line) {
+    const cell = boardChips[row][col];
+    const key = cellKey(row, col);
+    const isCornerCell = isCorner(row, col);
+
+    if (isCornerCell) {
+      // Corners count for everyone - no issues
+      continue;
+    }
+
+    // Check if blocked by opponent's chip
+    if (cell !== null && cell !== teamIndex) {
+      // If opponent's chip is locked, we can never complete this line
+      if (isCellLocked(allLockedCells, row, col)) {
+        return false;
+      }
+      // Otherwise, we could potentially remove it with a one-eyed jack
+      // For stalemate detection, we assume we can't (conservative)
+      // But actually, let's be more generous - if we have unplayed one-eyed jacks
+      // we might be able to remove it. For simplicity, consider it blocked.
+      return false;
+    }
+
+    if (lockedCells.has(key)) {
+      // Part of our previous sequence
+      alreadyLockedCells++;
+      overlapWithPrevious++;
+    }
+  }
+
+  // Check overlap rule: can only share 1 non-corner cell with previous sequences
+  if (sequencesCompleted > 0 && overlapWithPrevious > 1) {
+    return false;
+  }
+
+  // If all non-corner cells are already locked by us, this line is already counted
+  const nonCornerCount = line.filter(([r, c]) => !isCorner(r, c)).length;
+  if (alreadyLockedCells >= nonCornerCount) {
+    return false; // Already have this sequence
+  }
+
+  return true;
+}
+
+/**
+ * Check if a specific team can complete any valid sequence
+ */
+function canTeamCompleteSequence(
+  boardChips: BoardChips,
+  teamIndex: number,
+  lockedCells: Set<string>,
+  sequencesCompleted: number,
+  allLockedCells: Map<number, Set<string>>
+): boolean {
+  // Check all possible 5-cell lines on the board
+  for (const [dRow, dCol] of DIRECTIONS) {
+    for (let startRow = 0; startRow < 10; startRow++) {
+      for (let startCol = 0; startCol < 10; startCol++) {
+        // Check if 5-cell line starting here is valid
+        const line = getLineOfFive(startRow, startCol, dRow, dCol);
+        if (!line) continue;
+
+        const canComplete = canCompleteLineAsSequence(
+          line,
+          boardChips,
+          teamIndex,
+          lockedCells,
+          sequencesCompleted,
+          allLockedCells
+        );
+
+        if (canComplete) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if stalemate has occurred - no team can reach the required sequences
+ *
+ * A stalemate occurs when:
+ * 1. No team can complete another valid sequence (considering overlap rules)
+ * 2. All possible sequence lines are blocked
+ *
+ * When stalemate is detected:
+ * - Team with most sequences wins
+ * - If tied, team that reached that count first wins (via timestamps)
+ */
+export function checkStalemate(gameState: GameState): StalemateResult {
+  const { config, boardChips, lockedCells, sequencesCompleted, sequenceTimestamps } = gameState;
+  const teamCount = config.teamCount;
+
+  // Get current sequence counts
+  const sequenceCounts: number[] = [];
+  for (let i = 0; i < teamCount; i++) {
+    sequenceCounts.push(sequencesCompleted.get(i) || 0);
+  }
+
+  // Check if any team can still complete a valid sequence
+  let canAnyTeamScore = false;
+
+  for (let teamIndex = 0; teamIndex < teamCount; teamIndex++) {
+    const completed = sequencesCompleted.get(teamIndex) || 0;
+    if (completed >= config.sequencesToWin) continue; // Already won (shouldn't happen)
+
+    const teamLockedCells = lockedCells.get(teamIndex) || new Set<string>();
+
+    if (canTeamCompleteSequence(boardChips, teamIndex, teamLockedCells, completed, lockedCells)) {
+      canAnyTeamScore = true;
+      break;
+    }
+  }
+
+  if (canAnyTeamScore) {
+    return { isStalemate: false };
+  }
+
+  // Stalemate detected - determine winner
+  const maxSequences = Math.max(...sequenceCounts);
+
+  // If no one has any sequences, it's a true stalemate (shouldn't happen in practice)
+  if (maxSequences === 0) {
+    return {
+      isStalemate: true,
+      winnerTeamIndex: 0, // Default to first team
+      reason: 'highest_count',
+      sequenceCounts,
+    };
+  }
+
+  const teamsWithMax = sequenceCounts
+    .map((count, index) => ({ count, index }))
+    .filter(t => t.count === maxSequences);
+
+  if (teamsWithMax.length === 1) {
+    // Clear winner - team with most sequences
+    return {
+      isStalemate: true,
+      winnerTeamIndex: teamsWithMax[0].index,
+      reason: 'highest_count',
+      sequenceCounts,
+    };
+  }
+
+  // Tie - find who reached maxSequences first
+  let earliestTime = Infinity;
+  let winnerIndex = teamsWithMax[0].index;
+
+  for (const team of teamsWithMax) {
+    const timestamps = sequenceTimestamps.get(team.index) || [];
+    // Get the timestamp when they reached maxSequences
+    const timeToReachMax = timestamps[maxSequences - 1] || Infinity;
+    if (timeToReachMax < earliestTime) {
+      earliestTime = timeToReachMax;
+      winnerIndex = team.index;
+    }
+  }
+
+  return {
+    isStalemate: true,
+    winnerTeamIndex: winnerIndex,
+    reason: 'first_to_reach',
+    sequenceCounts,
+  };
+}
+
+/**
  * Apply a move to the game state
  * This mutates the game state directly
  */
@@ -222,6 +438,18 @@ export function applyMove(
     // Move to next player
     gameState.currentPlayerIndex =
       (gameState.currentPlayerIndex + 1) % gameState.players.length;
+
+    // Check for stalemate after each turn ends
+    if (gameState.phase === 'playing') {
+      const stalemateResult = checkStalemate(gameState);
+      if (stalemateResult.isStalemate && stalemateResult.winnerTeamIndex !== undefined) {
+        gameState.winnerTeamIndex = stalemateResult.winnerTeamIndex;
+        gameState.phase = 'finished';
+        result.gameOver = true;
+        result.winnerTeamIndex = stalemateResult.winnerTeamIndex;
+        result.stalemate = stalemateResult;
+      }
+    }
 
     return result;
   }
@@ -298,6 +526,11 @@ export function applyMove(
       // Update completed sequences count
       const newCount = (gameState.sequencesCompleted.get(player.teamIndex) || 0) + 1;
       gameState.sequencesCompleted.set(player.teamIndex, newCount);
+
+      // Record timestamp for this sequence (for stalemate tie-breaker)
+      const timestamps = gameState.sequenceTimestamps.get(player.teamIndex) || [];
+      timestamps.push(Date.now());
+      gameState.sequenceTimestamps.set(player.teamIndex, timestamps);
 
       // Add to completed sequences list
       gameState.completedSequences.push(sequence);

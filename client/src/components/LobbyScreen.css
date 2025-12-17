@@ -275,7 +275,29 @@
 .settings-section h3 {
   font-size: 0.9rem;
   color: var(--text-secondary);
-  margin: 0 0 var(--space-sm) 0;
+  margin: 0 0 var(--space-md) 0;
+}
+
+.setting-group {
+  margin-bottom: var(--space-md);
+}
+
+.setting-group:last-child {
+  margin-bottom: 0;
+}
+
+.setting-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+  font-weight: 500;
+}
+
+.setting-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
 }
 
 .time-limit-options {
@@ -301,6 +323,35 @@
 }
 
 .time-option-btn.active {
+  border-color: var(--accent-primary);
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--accent-primary);
+}
+
+/* Sequences to Win Options */
+.sequences-options {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.sequences-option-btn {
+  flex: 1;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.sequences-option-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-card);
+}
+
+.sequences-option-btn.active {
   border-color: var(--accent-primary);
   background: rgba(78, 205, 196, 0.15);
   color: var(--accent-primary);

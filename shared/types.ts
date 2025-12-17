@@ -141,11 +141,36 @@ export const TURN_TIME_OPTIONS: { value: TurnTimeLimit; label: string }[] = [
   { value: 120, label: '2 minutes' },
 ];
 
+// ============================================
+// SEQUENCES TO WIN
+// ============================================
+
+export type SequencesToWin = 2 | 3 | 4;
+
+export const SEQUENCES_TO_WIN_OPTIONS: { value: SequencesToWin; label: string }[] = [
+  { value: 2, label: '2 sequences' },
+  { value: 3, label: '3 sequences' },
+  { value: 4, label: '4 sequences' },
+];
+
+export const DEFAULT_SEQUENCES_TO_WIN: SequencesToWin = 2;
+
+// ============================================
+// STALEMATE DETECTION
+// ============================================
+
+export interface StalemateResult {
+  isStalemate: boolean;
+  winnerTeamIndex?: number;
+  reason?: 'highest_count' | 'first_to_reach';
+  sequenceCounts?: number[];
+}
+
 export interface GameConfig {
   playerCount: number;
   teamCount: number; // 2 or 3
   teamColors: TeamColor[];
-  sequencesToWin: number; // 2 for 2-team, 1 for 3-team
+  sequencesToWin: number; // configurable: 2, 3, or 4
   handSize: number;
 }
 
@@ -213,6 +238,9 @@ export interface GameState {
   // Turn timer
   turnTimeLimit: TurnTimeLimit;
   turnStartedAt: number | null; // Timestamp when current turn started
+
+  // Sequence timestamps for stalemate tie-breaker
+  sequenceTimestamps: Map<number, number[]>; // teamIndex -> [timestamp for seq 1, seq 2, ...]
 }
 
 // ============================================
@@ -230,6 +258,7 @@ export interface Room {
   maxPlayers: number;
   teamCount: number;
   turnTimeLimit: TurnTimeLimit;
+  sequencesToWin: SequencesToWin; // configurable: 2, 3, or 4
   gameState: GameState | null;
   createdAt: number;
   lastActivityAt: number; // Track last player activity for auto-cleanup
@@ -244,6 +273,7 @@ export interface RoomInfo {
   maxPlayers: number;
   teamCount: number;
   turnTimeLimit: TurnTimeLimit;
+  sequencesToWin: SequencesToWin; // configurable: 2, 3, or 4
 }
 
 // ============================================
@@ -283,6 +313,7 @@ export interface MoveResult {
   newSequences?: SequenceLine[];
   gameOver?: boolean;
   winnerTeamIndex?: number;
+  stalemate?: StalemateResult; // Added for stalemate detection
 }
 
 // ============================================
@@ -299,14 +330,14 @@ export interface TeamSwitchRequest {
 
 // Client -> Server events
 export interface ClientToServerEvents {
-  'create-room': (data: { roomName: string; playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit }, callback: (response: CreateRoomResponse) => void) => void;
+  'create-room': (data: { roomName: string; playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }, callback: (response: CreateRoomResponse) => void) => void;
   'join-room': (data: { roomCode: string; playerName: string; token?: string }, callback: (response: JoinRoomResponse) => void) => void;
   'leave-room': () => void;
   'start-game': (callback: (response: StartGameResponse) => void) => void;
   'kick-player': (playerId: string) => void;
   'game-action': (action: GameAction, callback: (response: MoveResult) => void) => void;
   'reconnect-to-room': (data: { roomCode: string; token: string }, callback: (response: ReconnectResponse) => void) => void;
-  'update-room-settings': (data: { turnTimeLimit: TurnTimeLimit }, callback: (response: { success: boolean; error?: string }) => void) => void;
+  'update-room-settings': (data: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }, callback: (response: { success: boolean; error?: string }) => void) => void;
   'toggle-ready': (callback: (response: { success: boolean; error?: string }) => void) => void;
   'request-team-switch': (toTeamIndex: number, callback: (response: { success: boolean; error?: string }) => void) => void;
   'respond-team-switch': (data: { playerId: string; approved: boolean }, callback: (response: { success: boolean; error?: string }) => void) => void;
@@ -323,7 +354,7 @@ export interface ServerToClientEvents {
   'player-disconnected': (playerId: string) => void;
   'error': (message: string) => void;
   'cut-result': (cutCards: CutCard[], dealerIndex: number) => void;
-  'game-over': (winnerTeamIndex: number) => void;
+  'game-over': (winnerTeamIndex: number, stalemate?: StalemateResult) => void;
   'turn-timeout': (data: { playerIndex: number; playerName: string }) => void;
   'team-switch-request': (request: TeamSwitchRequest) => void;
   'team-switch-response': (data: { playerId: string; approved: boolean; playerName: string }) => void;
