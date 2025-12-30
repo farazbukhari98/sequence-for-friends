@@ -11,9 +11,22 @@ import type {
   TurnTimeLimit,
   SequencesToWin,
   TeamSwitchRequest,
+  SequenceLength,
+  SeriesLength,
 } from '../../../shared/types';
 
 type SequenceSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+
+// Game mode info from server
+export interface GameModeInfo {
+  modes: string[];
+  changedBy: string;
+  settings: {
+    sequenceLength: number;
+    turnTimeLimit: number;
+    seriesLength: number;
+  };
+}
 
 interface UseSocketReturn {
   socket: SequenceSocket | null;
@@ -25,6 +38,7 @@ interface UseSocketReturn {
   turnTimeoutInfo: { playerIndex: number; playerName: string } | null;
   teamSwitchRequest: TeamSwitchRequest | null;
   teamSwitchResponse: { playerId: string; approved: boolean; playerName: string } | null;
+  gameModeInfo: GameModeInfo | null;
   // Actions
   createRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit, sequencesToWin?: SequencesToWin) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   joinRoom: (roomCode: string, playerName: string, token?: string) => Promise<{ roomInfo: RoomInfo; playerId: string; token: string } | { error: string }>;
@@ -33,7 +47,7 @@ interface UseSocketReturn {
   kickPlayer: (playerId: string) => void;
   startGame: () => Promise<{ success: boolean; error?: string }>;
   sendAction: (action: GameAction) => Promise<MoveResult>;
-  updateRoomSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }) => Promise<{ success: boolean; error?: string }>;
+  updateRoomSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }) => Promise<{ success: boolean; error?: string }>;
   toggleReady: () => Promise<{ success: boolean; error?: string }>;
   requestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
   respondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -41,6 +55,7 @@ interface UseSocketReturn {
   clearTurnTimeoutInfo: () => void;
   clearTeamSwitchRequest: () => void;
   clearTeamSwitchResponse: () => void;
+  clearGameModeInfo: () => void;
 }
 
 const SOCKET_URL = import.meta.env.PROD ? '' : 'http://localhost:3001';
@@ -55,6 +70,7 @@ export function useSocket(): UseSocketReturn {
   const [turnTimeoutInfo, setTurnTimeoutInfo] = useState<{ playerIndex: number; playerName: string } | null>(null);
   const [teamSwitchRequest, setTeamSwitchRequest] = useState<TeamSwitchRequest | null>(null);
   const [teamSwitchResponse, setTeamSwitchResponse] = useState<{ playerId: string; approved: boolean; playerName: string } | null>(null);
+  const [gameModeInfo, setGameModeInfo] = useState<GameModeInfo | null>(null);
 
   // Initialize socket connection
   useEffect(() => {
@@ -129,6 +145,10 @@ export function useSocket(): UseSocketReturn {
       setTeamSwitchResponse(response);
       // Auto-clear after 5 seconds
       setTimeout(() => setTeamSwitchResponse(null), 5000);
+    });
+
+    socket.on('game-mode-changed', (data) => {
+      setGameModeInfo(data);
     });
 
     return () => {
@@ -263,7 +283,7 @@ export function useSocket(): UseSocketReturn {
   }, []);
 
   const updateRoomSettings = useCallback(async (
-    settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }
+    settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }
   ): Promise<{ success: boolean; error?: string }> => {
     return new Promise((resolve) => {
       if (!socketRef.current) {
@@ -337,6 +357,10 @@ export function useSocket(): UseSocketReturn {
     setTeamSwitchResponse(null);
   }, []);
 
+  const clearGameModeInfo = useCallback(() => {
+    setGameModeInfo(null);
+  }, []);
+
   return {
     socket: socketRef.current,
     connected,
@@ -347,6 +371,7 @@ export function useSocket(): UseSocketReturn {
     turnTimeoutInfo,
     teamSwitchRequest,
     teamSwitchResponse,
+    gameModeInfo,
     createRoom,
     joinRoom,
     reconnect,
@@ -362,5 +387,6 @@ export function useSocket(): UseSocketReturn {
     clearTurnTimeoutInfo,
     clearTeamSwitchRequest,
     clearTeamSwitchResponse,
+    clearGameModeInfo,
   };
 }

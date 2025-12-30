@@ -36,6 +36,26 @@ import {
 import { applyMove } from './rules/engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
+
+/**
+ * Determine which special game modes are active based on settings
+ */
+function getActiveModes(settings: { sequenceLength: number; turnTimeLimit: number; seriesLength: number }): string[] {
+  const modes: string[] = [];
+
+  // Check for Speed Sequence (15s timer + Blitz)
+  if (settings.sequenceLength === 4 && settings.turnTimeLimit === 15) {
+    modes.push('speed-sequence');
+  } else if (settings.sequenceLength === 4) {
+    modes.push('blitz');
+  }
+
+  if (settings.seriesLength > 0) {
+    modes.push('series');
+  }
+
+  return modes;
+}
 const __dirname = path.dirname(__filename);
 
 const app = express();
@@ -210,6 +230,23 @@ io.on('connection', (socket) => {
     // Notify other players
     socket.to(room.code).emit('room-updated', toRoomInfo(room));
 
+    // Check if room has special modes enabled and notify new player
+    const settings = {
+      sequenceLength: room.sequenceLength,
+      turnTimeLimit: room.turnTimeLimit,
+      seriesLength: room.seriesLength,
+    };
+    const modes = getActiveModes(settings);
+    if (modes.length > 0) {
+      const host = room.players.find(p => p.id === room.hostId);
+      const hostName = host?.name || 'Host';
+      socket.emit('game-mode-changed', {
+        modes,
+        changedBy: hostName,
+        settings,
+      });
+    }
+
     console.log(`${player.name} joined room ${room.code}`);
   });
 
@@ -278,6 +315,14 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Get old settings before update to compare
+    const oldRoom = getRoom(playerInfo.roomCode);
+    const oldSettings = oldRoom ? {
+      sequenceLength: oldRoom.sequenceLength,
+      turnTimeLimit: oldRoom.turnTimeLimit,
+      seriesLength: oldRoom.seriesLength,
+    } : null;
+
     const result = updateRoomSettings(playerInfo.roomCode, playerInfo.playerId, {
       turnTimeLimit: data.turnTimeLimit,
       sequencesToWin: data.sequencesToWin,
@@ -294,6 +339,36 @@ io.on('connection', (socket) => {
 
     // Notify all players about the updated settings
     io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(result));
+
+    // Check if special modes were enabled and emit game-mode-changed
+    const newSettings = {
+      sequenceLength: result.sequenceLength,
+      turnTimeLimit: result.turnTimeLimit,
+      seriesLength: result.seriesLength,
+    };
+
+    const modes = getActiveModes(newSettings);
+    const oldModes = oldSettings ? getActiveModes(oldSettings) : [];
+
+    // Only emit if modes changed and we now have special modes
+    if (modes.length > 0 && JSON.stringify(modes) !== JSON.stringify(oldModes)) {
+      const host = result.players.find(p => p.id === result.hostId);
+      const hostName = host?.name || 'Host';
+
+      // Emit to all non-host players
+      for (const player of result.players) {
+        if (player.id !== result.hostId) {
+          const playerSocket = findSocketByPlayerId(player.id);
+          if (playerSocket) {
+            playerSocket.emit('game-mode-changed', {
+              modes,
+              changedBy: hostName,
+              settings: newSettings,
+            });
+          }
+        }
+      }
+    }
   });
 
   // Toggle ready status

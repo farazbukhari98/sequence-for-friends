@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, SequenceLength, SeriesLength, TeamSwitchRequest } from '../../../shared/types';
 import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, SEQUENCE_LENGTH_OPTIONS, SERIES_LENGTH_OPTIONS } from '../../../shared/types';
+import { GameModeModal, getActiveModes } from './GameModeModal';
+import type { GameModeType } from './GameModeModal';
+import type { GameModeInfo } from '../hooks/useSocket';
 import './LobbyScreen.css';
 
 interface LobbyScreenProps {
@@ -8,6 +11,7 @@ interface LobbyScreenProps {
   playerId: string;
   teamSwitchRequest: TeamSwitchRequest | null;
   teamSwitchResponse: { playerId: string; approved: boolean; playerName: string } | null;
+  gameModeInfo: GameModeInfo | null;
   onLeave: () => void;
   onKickPlayer: (playerId: string) => void;
   onStartGame: () => Promise<{ success: boolean; error?: string }>;
@@ -16,6 +20,7 @@ interface LobbyScreenProps {
   onRequestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
   onRespondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
   onClearTeamSwitchRequest: () => void;
+  onClearGameModeInfo: () => void;
 }
 
 export function LobbyScreen({
@@ -23,6 +28,7 @@ export function LobbyScreen({
   playerId,
   teamSwitchRequest,
   teamSwitchResponse,
+  gameModeInfo,
   onLeave,
   onKickPlayer,
   onStartGame,
@@ -31,6 +37,7 @@ export function LobbyScreen({
   onRequestTeamSwitch,
   onRespondTeamSwitch,
   onClearTeamSwitchRequest,
+  onClearGameModeInfo,
 }: LobbyScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -460,6 +467,15 @@ export function LobbyScreen({
           </div>
         )}
       </div>
+
+      {/* Game Mode Info Modal */}
+      {gameModeInfo && (
+        <GameModeModal
+          modes={gameModeInfo.modes as GameModeType[]}
+          hostName={gameModeInfo.changedBy}
+          onAcknowledge={onClearGameModeInfo}
+        />
+      )}
     </div>
   );
 }

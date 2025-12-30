@@ -427,6 +427,7 @@ export interface ServerToClientEvents {
   'turn-timeout': (data: { playerIndex: number; playerName: string }) => void;
   'team-switch-request': (request: TeamSwitchRequest) => void;
   'team-switch-response': (data: { playerId: string; approved: boolean; playerName: string }) => void;
+  'game-mode-changed': (data: { modes: string[]; changedBy: string; settings: { sequenceLength: number; turnTimeLimit: number; seriesLength: number } }) => void;
 }
 
 // Response types

@@ -35,6 +35,7 @@ function App() {
     turnTimeoutInfo,
     teamSwitchRequest,
     teamSwitchResponse,
+    gameModeInfo,
     createRoom,
     joinRoom,
     reconnect,
@@ -48,6 +49,7 @@ function App() {
     respondTeamSwitch,
     clearError,
     clearTeamSwitchRequest,
+    clearGameModeInfo,
   } = useSocket();
 
   // Check for existing session on mount
@@ -181,6 +183,7 @@ function App() {
           playerId={playerId}
           teamSwitchRequest={teamSwitchRequest}
           teamSwitchResponse={teamSwitchResponse}
+          gameModeInfo={gameModeInfo}
           onLeave={handleLeaveRoom}
           onKickPlayer={kickPlayer}
           onStartGame={handleStartGame}
@@ -189,6 +192,7 @@ function App() {
           onRequestTeamSwitch={requestTeamSwitch}
           onRespondTeamSwitch={respondTeamSwitch}
           onClearTeamSwitchRequest={clearTeamSwitchRequest}
+          onClearGameModeInfo={clearGameModeInfo}
         />
       )}
 
