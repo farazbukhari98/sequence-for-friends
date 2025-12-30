@@ -357,6 +357,116 @@
   color: var(--accent-primary);
 }
 
+/* Quick Presets */
+.presets-group {
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.presets-options {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.preset-btn {
+  flex: 1;
+  padding: var(--space-md);
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.preset-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-card);
+  transform: translateY(-2px);
+}
+
+.preset-btn.active {
+  border-color: var(--accent-primary);
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--accent-primary);
+}
+
+.preset-btn.speed {
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, rgba(233, 69, 96, 0.1) 100%);
+}
+
+.preset-btn.speed:hover {
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(233, 69, 96, 0.15) 100%);
+}
+
+.preset-btn.speed.active {
+  background: linear-gradient(135deg, rgba(78, 205, 196, 0.15) 0%, rgba(233, 69, 96, 0.2) 100%);
+  border-color: #e94560;
+  color: #e94560;
+}
+
+/* Game Mode Options (Blitz/Standard) */
+.game-mode-options {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.game-mode-btn {
+  flex: 1;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.game-mode-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-card);
+}
+
+.game-mode-btn.active {
+  border-color: var(--accent-primary);
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--accent-primary);
+}
+
+/* Series Options */
+.series-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.series-option-btn {
+  flex: 1;
+  min-width: 80px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.series-option-btn:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-card);
+}
+
+.series-option-btn.active {
+  border-color: var(--accent-primary);
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--accent-primary);
+}
+
 /* Teams Section */
 .teams-section {
   flex: 1;

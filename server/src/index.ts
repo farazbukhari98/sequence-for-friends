@@ -29,6 +29,8 @@ import {
   areAllPlayersReady,
   switchPlayerTeam,
   updateRoomActivity,
+  continueSeries,
+  endSeries,
 } from './rooms.js';
 
 import { applyMove } from './rules/engine.js';
@@ -152,7 +154,9 @@ io.on('connection', (socket) => {
         data.maxPlayers,
         data.teamCount,
         data.turnTimeLimit ?? 0,
-        data.sequencesToWin // Pass sequencesToWin to createRoom
+        data.sequencesToWin,
+        data.sequenceLength,
+        data.seriesLength // Pass seriesLength to createRoom
       );
 
       // Join socket to room
@@ -171,7 +175,8 @@ io.on('connection', (socket) => {
       // Send room info to the creator
       socket.emit('room-updated', roomInfo);
 
-      console.log(`Room "${room.name}" (${room.code}) created by ${player.name} - ${room.sequencesToWin} sequences to win`);
+      const seriesInfo = room.seriesLength > 0 ? `, Best of ${room.seriesLength}` : '';
+      console.log(`Room "${room.name}" (${room.code}) created by ${player.name} - ${room.sequencesToWin} sequences to win, ${room.sequenceLength}-in-a-row${seriesInfo}`);
     } catch (error) {
       callback({
         success: false,
@@ -275,7 +280,9 @@ io.on('connection', (socket) => {
 
     const result = updateRoomSettings(playerInfo.roomCode, playerInfo.playerId, {
       turnTimeLimit: data.turnTimeLimit,
-      sequencesToWin: data.sequencesToWin, // Pass sequencesToWin to updateRoomSettings
+      sequencesToWin: data.sequencesToWin,
+      sequenceLength: data.sequenceLength,
+      seriesLength: data.seriesLength,
     });
 
     if ('error' in result) {
@@ -531,6 +538,71 @@ io.on('connection', (socket) => {
         io.to(playerInfo.roomCode).emit('game-over', result.winnerTeamIndex, result.stalemate);
       }
     }
+  });
+
+  // Continue series - start next game in a series
+  socket.on('continue-series', (callback) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) {
+      callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+
+    const room = getRoom(playerInfo.roomCode);
+    if (!room) {
+      callback({ success: false, error: 'Room not found' });
+      return;
+    }
+
+    const result = continueSeries(playerInfo.roomCode, playerInfo.playerId);
+
+    if ('error' in result) {
+      if (result.error === 'Series over') {
+        // Series is complete, return to lobby
+        callback({ success: true });
+        io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(room));
+        return;
+      }
+      callback({ success: false, error: result.error });
+      return;
+    }
+
+    callback({ success: true });
+
+    // Send new game state to all players
+    for (const player of room.players) {
+      const clientState = toClientGameState(result, player.id);
+      io.to(playerInfo.roomCode).emit('game-state-updated', clientState);
+    }
+
+    // Start turn timer if applicable
+    if (result.turnTimeLimit > 0) {
+      startTurnTimer(playerInfo.roomCode);
+    }
+  });
+
+  // End series early - return to lobby
+  socket.on('end-series', (callback) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) {
+      callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+
+    const result = endSeries(playerInfo.roomCode, playerInfo.playerId);
+
+    if ('error' in result) {
+      callback({ success: false, error: result.error });
+      return;
+    }
+
+    callback({ success: true });
+
+    // Clear any active timer
+    clearTurnTimer(playerInfo.roomCode);
+
+    // Send updated room info to all players
+    io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(result));
   });
 
   // Handle disconnect

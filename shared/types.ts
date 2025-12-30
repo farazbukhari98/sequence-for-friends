@@ -131,10 +131,11 @@ export type GamePhase = 'lobby' | 'cutting' | 'playing' | 'finished';
 // TURN TIME LIMIT
 // ============================================
 
-export type TurnTimeLimit = 0 | 30 | 45 | 60 | 90 | 120; // 0 = no limit, values in seconds
+export type TurnTimeLimit = 0 | 15 | 30 | 45 | 60 | 90 | 120; // 0 = no limit, values in seconds
 
 export const TURN_TIME_OPTIONS: { value: TurnTimeLimit; label: string }[] = [
   { value: 0, label: 'No Limit' },
+  { value: 15, label: '15s (Speed)' },
   { value: 30, label: '30 seconds' },
   { value: 45, label: '45 seconds' },
   { value: 60, label: '1 minute' },
@@ -157,6 +158,61 @@ export const SEQUENCES_TO_WIN_OPTIONS: { value: SequencesToWin; label: string }[
 export const DEFAULT_SEQUENCES_TO_WIN: SequencesToWin = 2;
 
 // ============================================
+// SEQUENCE LENGTH (BLITZ MODE)
+// ============================================
+
+export type SequenceLength = 4 | 5;
+
+export const SEQUENCE_LENGTH_OPTIONS: { value: SequenceLength; label: string }[] = [
+  { value: 5, label: 'Standard (5 in a row)' },
+  { value: 4, label: 'Blitz (4 in a row)' },
+];
+
+export const DEFAULT_SEQUENCE_LENGTH: SequenceLength = 5;
+
+// ============================================
+// SERIES MODE (Best of 3, 5, etc.)
+// ============================================
+
+export type SeriesLength = 0 | 3 | 5 | 7; // 0 = single game, 3 = best of 3, etc.
+
+export const SERIES_LENGTH_OPTIONS: { value: SeriesLength; label: string }[] = [
+  { value: 0, label: 'Single Game' },
+  { value: 3, label: 'Best of 3' },
+  { value: 5, label: 'Best of 5' },
+  { value: 7, label: 'Best of 7' },
+];
+
+export const DEFAULT_SERIES_LENGTH: SeriesLength = 0;
+
+export interface SeriesState {
+  seriesLength: SeriesLength; // 3 = best of 3
+  gamesPlayed: number;
+  teamWins: number[]; // Wins per team index
+  seriesWinnerTeamIndex: number | null;
+}
+
+// ============================================
+// GAME EVENTS (ACTIVITY LOG)
+// ============================================
+
+export type GameEventType = 'play' | 'remove' | 'sequence' | 'dead_card' | 'timeout' | 'win' | 'card-replaced' | 'chip-removed' | 'chip-placed' | 'sequence-completed';
+
+export interface GameEvent {
+  id: string;
+  timestamp: number;
+  type: GameEventType;
+  playerId?: string;
+  playerName?: string;
+  teamIndex?: number;
+  teamColor?: TeamColor;
+  card?: CardCode;
+  position?: [number, number];
+  targetTeamIndex?: number;
+  sequenceCount?: number;
+}
+
+// ============================================
 // STALEMATE DETECTION
 // ============================================
 
@@ -172,6 +228,7 @@ export interface GameConfig {
   teamCount: number; // 2 or 3
   teamColors: TeamColor[];
   sequencesToWin: number; // configurable: 2, 3, or 4
+  sequenceLength: SequenceLength; // 4 for Blitz, 5 for standard
   handSize: number;
 }
 
@@ -242,6 +299,9 @@ export interface GameState {
 
   // Sequence timestamps for stalemate tie-breaker
   sequenceTimestamps: Map<number, number[]>; // teamIndex -> [timestamp for seq 1, seq 2, ...]
+
+  // Activity log
+  eventLog: GameEvent[];
 }
 
 // ============================================
@@ -260,6 +320,9 @@ export interface Room {
   teamCount: number;
   turnTimeLimit: TurnTimeLimit;
   sequencesToWin: SequencesToWin; // configurable: 2, 3, or 4
+  sequenceLength: SequenceLength; // 4 for Blitz, 5 for standard
+  seriesLength: SeriesLength; // 0 = single game, 3 = best of 3, etc.
+  seriesState: SeriesState | null; // Tracks series progress
   gameState: GameState | null;
   createdAt: number;
   lastActivityAt: number; // Track last player activity for auto-cleanup
@@ -275,6 +338,9 @@ export interface RoomInfo {
   teamCount: number;
   turnTimeLimit: TurnTimeLimit;
   sequencesToWin: SequencesToWin; // configurable: 2, 3, or 4
+  sequenceLength: SequenceLength; // 4 for Blitz, 5 for standard
+  seriesLength: SeriesLength; // 0 = single game, 3 = best of 3, etc.
+  seriesState: SeriesState | null; // Tracks series progress
 }
 
 // ============================================
@@ -331,17 +397,19 @@ export interface TeamSwitchRequest {
 
 // Client -> Server events
 export interface ClientToServerEvents {
-  'create-room': (data: { roomName: string; playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }, callback: (response: CreateRoomResponse) => void) => void;
+  'create-room': (data: { roomName: string; playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }, callback: (response: CreateRoomResponse) => void) => void;
   'join-room': (data: { roomCode: string; playerName: string; token?: string }, callback: (response: JoinRoomResponse) => void) => void;
   'leave-room': () => void;
   'start-game': (callback: (response: StartGameResponse) => void) => void;
   'kick-player': (playerId: string) => void;
   'game-action': (action: GameAction, callback: (response: MoveResult) => void) => void;
   'reconnect-to-room': (data: { roomCode: string; token: string }, callback: (response: ReconnectResponse) => void) => void;
-  'update-room-settings': (data: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }, callback: (response: { success: boolean; error?: string }) => void) => void;
+  'update-room-settings': (data: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }, callback: (response: { success: boolean; error?: string }) => void) => void;
   'toggle-ready': (callback: (response: { success: boolean; error?: string }) => void) => void;
   'request-team-switch': (toTeamIndex: number, callback: (response: { success: boolean; error?: string }) => void) => void;
   'respond-team-switch': (data: { playerId: string; approved: boolean }, callback: (response: { success: boolean; error?: string }) => void) => void;
+  'continue-series': (callback: (response: { success: boolean; error?: string }) => void) => void; // Continue to next game in series
+  'end-series': (callback: (response: { success: boolean; error?: string }) => void) => void; // End series early, return to lobby
 }
 
 // Server -> Client events
@@ -414,6 +482,8 @@ export interface ClientGameState {
   // Turn timer
   turnTimeLimit: TurnTimeLimit;
   turnStartedAt: number | null;
+  // Activity log
+  eventLog: GameEvent[];
 }
 
 // ============================================

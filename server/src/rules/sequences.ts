@@ -1,8 +1,10 @@
 import {
   BoardChips,
   SequenceLine,
+  SequenceLength,
   isCorner,
   cellKey,
+  DEFAULT_SEQUENCE_LENGTH,
 } from '../../../shared/types.js';
 
 // Direction vectors for checking sequences
@@ -38,7 +40,7 @@ function isValidPosition(row: number, col: number): boolean {
 }
 
 /**
- * Find all sequences of 5+ for a team starting from a given position in a direction
+ * Find all sequences of N+ for a team starting from a given position in a direction
  */
 function findSequenceInDirection(
   boardChips: BoardChips,
@@ -46,7 +48,8 @@ function findSequenceInDirection(
   startCol: number,
   dRow: number,
   dCol: number,
-  teamIndex: number
+  teamIndex: number,
+  sequenceLength: SequenceLength
 ): [number, number][] | null {
   const cells: [number, number][] = [];
 
@@ -60,9 +63,9 @@ function findSequenceInDirection(
     col += dCol;
   }
 
-  // Need at least 5 to be a sequence
-  if (cells.length >= 5) {
-    return cells.slice(0, 5); // Return exactly 5 cells
+  // Need at least sequenceLength to be a sequence
+  if (cells.length >= sequenceLength) {
+    return cells.slice(0, sequenceLength); // Return exactly sequenceLength cells
   }
 
   return null;
@@ -75,16 +78,18 @@ export function getSequencesThroughCell(
   boardChips: BoardChips,
   targetRow: number,
   targetCol: number,
-  teamIndex: number
+  teamIndex: number,
+  sequenceLength: SequenceLength = DEFAULT_SEQUENCE_LENGTH
 ): SequenceLine[] {
   const sequences: SequenceLine[] = [];
+  const maxLookBack = sequenceLength - 1;
 
   for (const [dRow, dCol] of DIRECTIONS) {
-    // Find the start of potential sequence (go backwards up to 4 cells)
+    // Find the start of potential sequence (go backwards up to sequenceLength-1 cells)
     let startRow = targetRow;
     let startCol = targetCol;
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < maxLookBack; i++) {
       const prevRow = startRow - dRow;
       const prevCol = startCol - dCol;
 
@@ -95,7 +100,7 @@ export function getSequencesThroughCell(
       startCol = prevCol;
     }
 
-    // Now find all 5-cell sequences starting from this extended start
+    // Now find all N-cell sequences starting from this extended start
     let row = startRow;
     let col = startCol;
     const line: [number, number][] = [];
@@ -106,10 +111,10 @@ export function getSequencesThroughCell(
       col += dCol;
     }
 
-    // Check all possible 5-cell windows that include our target cell
-    if (line.length >= 5) {
-      for (let start = 0; start <= line.length - 5; start++) {
-        const window = line.slice(start, start + 5);
+    // Check all possible N-cell windows that include our target cell
+    if (line.length >= sequenceLength) {
+      for (let start = 0; start <= line.length - sequenceLength; start++) {
+        const window = line.slice(start, start + sequenceLength);
         // Check if target cell is in this window
         if (window.some(([r, c]) => r === targetRow && c === targetCol)) {
           sequences.push({
@@ -158,10 +163,11 @@ export function detectNewSequences(
   teamIndex: number,
   lockedCells: Set<string>,
   sequencesCompleted: number,
-  sequencesToWin: number
+  sequencesToWin: number,
+  sequenceLength: SequenceLength = DEFAULT_SEQUENCE_LENGTH
 ): SequenceLine[] {
   // Get all potential sequences through this cell
-  const potentialSequences = getSequencesThroughCell(boardChips, targetRow, targetCol, teamIndex);
+  const potentialSequences = getSequencesThroughCell(boardChips, targetRow, targetCol, teamIndex, sequenceLength);
 
   // Filter out sequences that are already locked (all cells already locked)
   // and validate overlap rules

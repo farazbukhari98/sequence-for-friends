@@ -10,7 +10,12 @@ import {
   cellKey,
   TurnTimeLimit,
   SequencesToWin,
+  SequenceLength,
+  SeriesLength,
+  SeriesState,
   DEFAULT_SEQUENCES_TO_WIN,
+  DEFAULT_SEQUENCE_LENGTH,
+  DEFAULT_SERIES_LENGTH,
 } from '../../shared/types.js';
 import { createGameConfig, initializeGame, assignTeams } from './gameState.js';
 
@@ -101,6 +106,9 @@ export function toRoomInfo(room: Room): RoomInfo {
     teamCount: room.teamCount,
     turnTimeLimit: room.turnTimeLimit,
     sequencesToWin: room.sequencesToWin,
+    sequenceLength: room.sequenceLength,
+    seriesLength: room.seriesLength,
+    seriesState: room.seriesState,
   };
 }
 
@@ -144,6 +152,7 @@ export function toClientGameState(gameState: GameState, playerId: string): Clien
     cutCards: gameState.cutCards,
     turnTimeLimit: gameState.turnTimeLimit,
     turnStartedAt: gameState.turnStartedAt,
+    eventLog: gameState.eventLog.slice(-30), // Last 30 events
   };
 }
 
@@ -156,7 +165,9 @@ export function createRoom(
   maxPlayers: number,
   teamCount: number,
   turnTimeLimit: TurnTimeLimit = 0,
-  sequencesToWin: SequencesToWin = DEFAULT_SEQUENCES_TO_WIN
+  sequencesToWin: SequencesToWin = DEFAULT_SEQUENCES_TO_WIN,
+  sequenceLength: SequenceLength = DEFAULT_SEQUENCE_LENGTH,
+  seriesLength: SeriesLength = DEFAULT_SERIES_LENGTH
 ): { room: Room; player: Player } {
   // Validate player count
   if (!VALID_PLAYER_COUNTS.includes(maxPlayers)) {
@@ -173,6 +184,11 @@ export function createRoom(
     throw new Error(`Invalid sequences to win: ${sequencesToWin}. Must be 2, 3, or 4`);
   }
 
+  // Validate sequence length
+  if (![4, 5].includes(sequenceLength)) {
+    throw new Error(`Invalid sequence length: ${sequenceLength}. Must be 4 or 5`);
+  }
+
   const code = getUniqueRoomCode();
   const host = createPlayer(hostName, true);
   const now = Date.now();
@@ -187,6 +203,9 @@ export function createRoom(
     teamCount,
     turnTimeLimit,
     sequencesToWin,
+    sequenceLength,
+    seriesLength,
+    seriesState: null,
     gameState: null,
     createdAt: now,
     lastActivityAt: now,
@@ -207,7 +226,7 @@ export function createRoom(
 export function updateRoomSettings(
   roomCode: string,
   hostId: string,
-  settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }
+  settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }
 ): Room | { error: string } {
   const room = rooms.get(roomCode);
   if (!room) return { error: 'Room not found' };
@@ -230,6 +249,22 @@ export function updateRoomSettings(
       return { error: `Invalid sequences to win: ${settings.sequencesToWin}. Must be 2, 3, or 4` };
     }
     room.sequencesToWin = settings.sequencesToWin;
+  }
+
+  if (settings.sequenceLength !== undefined) {
+    // Validate sequence length
+    if (![4, 5].includes(settings.sequenceLength)) {
+      return { error: `Invalid sequence length: ${settings.sequenceLength}. Must be 4 or 5` };
+    }
+    room.sequenceLength = settings.sequenceLength;
+  }
+
+  if (settings.seriesLength !== undefined) {
+    // Validate series length
+    if (![0, 3, 5, 7].includes(settings.seriesLength)) {
+      return { error: `Invalid series length: ${settings.seriesLength}. Must be 0, 3, 5, or 7` };
+    }
+    room.seriesLength = settings.seriesLength;
   }
 
   return room;
@@ -370,16 +405,109 @@ export function startGame(roomCode: string, hostId: string): GameState | { error
     return { error: `Invalid player count: ${room.players.length}. Need one of: ${VALID_PLAYER_COUNTS.join(', ')}` };
   }
 
-  // Create game config with room's sequencesToWin setting
-  const config = createGameConfig(room.players.length, room.sequencesToWin);
+  // Create game config with room's sequencesToWin and sequenceLength settings
+  const config = createGameConfig(room.players.length, room.sequencesToWin, room.sequenceLength);
 
   // Initialize game state with turn time limit
   const gameState = initializeGame(room.players, config, room.turnTimeLimit);
+
+  // Initialize series state if playing a series
+  if (room.seriesLength > 0 && !room.seriesState) {
+    room.seriesState = {
+      seriesLength: room.seriesLength,
+      gamesPlayed: 0,
+      teamWins: Array(room.teamCount).fill(0),
+      seriesWinnerTeamIndex: null,
+    };
+  }
 
   room.phase = 'in-game';
   room.gameState = gameState;
 
   return gameState;
+}
+
+/**
+ * Continue series - start next game after a game ends
+ */
+export function continueSeries(roomCode: string, hostId: string): GameState | { error: string } {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+
+  if (room.hostId !== hostId) {
+    return { error: 'Only the host can continue the series' };
+  }
+
+  if (!room.seriesState) {
+    return { error: 'No series in progress' };
+  }
+
+  if (room.seriesState.seriesWinnerTeamIndex !== null) {
+    return { error: 'Series has already ended' };
+  }
+
+  if (!room.gameState || room.gameState.winnerTeamIndex === null) {
+    return { error: 'Current game is not finished' };
+  }
+
+  // Record the win for the winning team
+  const winnerTeam = room.gameState.winnerTeamIndex;
+  room.seriesState.teamWins[winnerTeam]++;
+  room.seriesState.gamesPlayed++;
+
+  // Check if series is won (majority of games)
+  const winsNeeded = Math.ceil(room.seriesLength / 2);
+  if (room.seriesState.teamWins[winnerTeam] >= winsNeeded) {
+    room.seriesState.seriesWinnerTeamIndex = winnerTeam;
+    // Return to lobby with series result
+    room.phase = 'waiting';
+    room.gameState = null;
+
+    // Reset player ready states
+    for (const player of room.players) {
+      player.ready = player.id === room.hostId;
+      player.hand = [];
+      player.discardPile = [];
+    }
+
+    return { error: 'Series over' }; // Not really an error, but signals series complete
+  }
+
+  // Create new game config
+  const config = createGameConfig(room.players.length, room.sequencesToWin, room.sequenceLength);
+
+  // Initialize new game state
+  const gameState = initializeGame(room.players, config, room.turnTimeLimit);
+
+  room.gameState = gameState;
+
+  return gameState;
+}
+
+/**
+ * End series early - return to lobby
+ */
+export function endSeries(roomCode: string, hostId: string): Room | { error: string } {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+
+  if (room.hostId !== hostId) {
+    return { error: 'Only the host can end the series' };
+  }
+
+  // Reset to lobby state
+  room.phase = 'waiting';
+  room.gameState = null;
+  room.seriesState = null;
+
+  // Reset player ready states
+  for (const player of room.players) {
+    player.ready = player.id === room.hostId;
+    player.hand = [];
+    player.discardPile = [];
+  }
+
+  return room;
 }
 
 /**

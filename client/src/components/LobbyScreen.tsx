@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, TeamSwitchRequest } from '../../../shared/types';
-import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS } from '../../../shared/types';
+import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, SequenceLength, SeriesLength, TeamSwitchRequest } from '../../../shared/types';
+import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, SEQUENCE_LENGTH_OPTIONS, SERIES_LENGTH_OPTIONS } from '../../../shared/types';
 import './LobbyScreen.css';
 
 interface LobbyScreenProps {
@@ -11,7 +11,7 @@ interface LobbyScreenProps {
   onLeave: () => void;
   onKickPlayer: (playerId: string) => void;
   onStartGame: () => Promise<{ success: boolean; error?: string }>;
-  onUpdateSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin }) => Promise<{ success: boolean; error?: string }>;
+  onUpdateSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }) => Promise<{ success: boolean; error?: string }>;
   onToggleReady: () => Promise<{ success: boolean; error?: string }>;
   onRequestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
   onRespondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -116,6 +116,42 @@ export function LobbyScreen({
 
   const handleUpdateSequencesToWin = async (value: SequencesToWin) => {
     const result = await onUpdateSettings({ sequencesToWin: value });
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleUpdateSequenceLength = async (value: SequenceLength) => {
+    const result = await onUpdateSettings({ sequenceLength: value });
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleSpeedSequencePreset = async () => {
+    // Speed Sequence: 15s timer + Blitz (4-in-a-row)
+    const result = await onUpdateSettings({
+      turnTimeLimit: 15,
+      sequenceLength: 4
+    });
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleClassicPreset = async () => {
+    // Classic: No timer + Standard (5-in-a-row)
+    const result = await onUpdateSettings({
+      turnTimeLimit: 0,
+      sequenceLength: 5
+    });
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleUpdateSeriesLength = async (value: SeriesLength) => {
+    const result = await onUpdateSettings({ seriesLength: value });
     if (result.error) {
       setError(result.error);
     }
@@ -272,15 +308,21 @@ export function LobbyScreen({
             <span className="info-value">{roomInfo.teamCount}</span>
           </div>
           <div className="info-item">
-            <span className="info-label">To Win</span>
+            <span className="info-label">Mode</span>
             <span className="info-value">
-              {roomInfo.sequencesToWin} sequence{roomInfo.sequencesToWin > 1 ? 's' : ''}
+              {roomInfo.sequenceLength === 4 ? 'Blitz' : 'Standard'}
             </span>
           </div>
           <div className="info-item">
-            <span className="info-label">Turn Timer</span>
+            <span className="info-label">Series</span>
             <span className="info-value">
-              {roomInfo.turnTimeLimit === 0 ? 'No Limit' : `${roomInfo.turnTimeLimit}s`}
+              {roomInfo.seriesLength === 0 ? 'Single' : `Bo${roomInfo.seriesLength}`}
+            </span>
+          </div>
+          <div className="info-item">
+            <span className="info-label">Timer</span>
+            <span className="info-value">
+              {roomInfo.turnTimeLimit === 0 ? 'None' : `${roomInfo.turnTimeLimit}s`}
             </span>
           </div>
         </div>
@@ -289,6 +331,45 @@ export function LobbyScreen({
         {isHost && (
           <div className="settings-section">
             <h3>Game Settings</h3>
+
+            {/* Quick Presets */}
+            <div className="setting-group presets-group">
+              <label className="setting-label">Quick Presets</label>
+              <div className="presets-options">
+                <button
+                  className={`preset-btn ${roomInfo.turnTimeLimit === 0 && roomInfo.sequenceLength === 5 ? 'active' : ''}`}
+                  onClick={handleClassicPreset}
+                >
+                  Classic
+                </button>
+                <button
+                  className={`preset-btn speed ${roomInfo.turnTimeLimit === 15 && roomInfo.sequenceLength === 4 ? 'active' : ''}`}
+                  onClick={handleSpeedSequencePreset}
+                >
+                  Speed Sequence
+                </button>
+              </div>
+            </div>
+
+            <div className="setting-group">
+              <label className="setting-label">Game Mode</label>
+              <div className="game-mode-options">
+                {SEQUENCE_LENGTH_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`game-mode-btn ${roomInfo.sequenceLength === option.value ? 'active' : ''}`}
+                    onClick={() => handleUpdateSequenceLength(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <p className="setting-hint">
+                {roomInfo.sequenceLength === 4
+                  ? 'Blitz: Faster games with 4-in-a-row sequences'
+                  : 'Standard: Classic 5-in-a-row sequences'}
+              </p>
+            </div>
 
             <div className="setting-group">
               <label className="setting-label">Sequences to Win</label>
@@ -321,6 +402,26 @@ export function LobbyScreen({
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="setting-group">
+              <label className="setting-label">Series Mode</label>
+              <div className="series-options">
+                {SERIES_LENGTH_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`series-option-btn ${roomInfo.seriesLength === option.value ? 'active' : ''}`}
+                    onClick={() => handleUpdateSeriesLength(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <p className="setting-hint">
+                {roomInfo.seriesLength === 0
+                  ? 'Single game - winner takes all'
+                  : `Best of ${roomInfo.seriesLength} - first to ${Math.ceil(roomInfo.seriesLength / 2)} wins`}
+              </p>
             </div>
           </div>
         )}

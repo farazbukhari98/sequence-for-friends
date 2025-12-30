@@ -5,6 +5,7 @@ import {
   BoardChips,
   CutCard,
   CardCode,
+  GameEvent,
   HAND_SIZES,
   TEAM_COLORS_2,
   TEAM_COLORS_3,
@@ -12,7 +13,9 @@ import {
   getRankValue,
   TurnTimeLimit,
   SequencesToWin,
+  SequenceLength,
   DEFAULT_SEQUENCES_TO_WIN,
+  DEFAULT_SEQUENCE_LENGTH,
 } from '../../shared/types.js';
 
 import { createDeck, shuffleDeck, dealCards, cutCard } from './rules/deck.js';
@@ -21,10 +24,12 @@ import { createDeck, shuffleDeck, dealCards, cutCard } from './rules/deck.js';
  * Create the initial game configuration based on player count
  * @param playerCount - Number of players
  * @param sequencesToWin - Optional override for sequences needed to win (default: 2)
+ * @param sequenceLength - Optional override for sequence length (default: 5, blitz: 4)
  */
 export function createGameConfig(
   playerCount: number,
-  sequencesToWin?: SequencesToWin
+  sequencesToWin?: SequencesToWin,
+  sequenceLength?: SequenceLength
 ): GameConfig {
   const teamCount = getTeamCount(playerCount);
   const teamColors = teamCount === 2 ? TEAM_COLORS_2 : TEAM_COLORS_3;
@@ -35,6 +40,7 @@ export function createGameConfig(
     teamCount,
     teamColors,
     sequencesToWin: sequencesToWin ?? DEFAULT_SEQUENCES_TO_WIN,
+    sequenceLength: sequenceLength ?? DEFAULT_SEQUENCE_LENGTH,
     handSize,
   };
 }
@@ -121,6 +127,7 @@ export function initializeGame(
     turnTimeLimit,
     turnStartedAt: turnTimeLimit > 0 ? Date.now() : null,
     sequenceTimestamps: new Map(), // For stalemate tie-breaker
+    eventLog: [], // Activity log
   };
 }
 

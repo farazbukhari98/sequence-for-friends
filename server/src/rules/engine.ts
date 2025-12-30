@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import {
   GameState,
   GameAction,
@@ -8,6 +9,9 @@ import {
   BoardChips,
   SequenceLine,
   StalemateResult,
+  GameEvent,
+  GameEventType,
+  Player,
   BOARD_LAYOUT,
   isJack,
   getJackType,
@@ -18,6 +22,41 @@ import {
 
 import { drawCard, reshuffleDiscards } from './deck.js';
 import { detectNewSequences, isCellLocked, lockSequenceCells } from './sequences.js';
+
+/**
+ * Create a game event for the activity log
+ */
+function createGameEvent(
+  type: GameEventType,
+  player: Player,
+  details?: {
+    card?: CardCode;
+    position?: [number, number];
+    targetTeamIndex?: number;
+    sequenceCount?: number;
+  }
+): GameEvent {
+  return {
+    id: uuidv4(),
+    type,
+    timestamp: Date.now(),
+    playerId: player.id,
+    playerName: player.name,
+    teamIndex: player.teamIndex,
+    teamColor: player.teamColor,
+    ...details,
+  };
+}
+
+/**
+ * Add event to game log (keeps last 50 events)
+ */
+function logEvent(gameState: GameState, event: GameEvent): void {
+  gameState.eventLog.push(event);
+  if (gameState.eventLog.length > 50) {
+    gameState.eventLog.shift();
+  }
+}
 
 // Direction vectors for checking sequences (matching sequences.ts)
 const DIRECTIONS: [number, number][] = [
@@ -191,17 +230,18 @@ export function isLegalMove(
 }
 
 /**
- * Get a line of 5 cells starting from position in direction
+ * Get a line of N cells starting from position in direction
  */
-function getLineOfFive(
+function getLineOfN(
   startRow: number,
   startCol: number,
   dRow: number,
-  dCol: number
+  dCol: number,
+  length: number
 ): [number, number][] | null {
   const cells: [number, number][] = [];
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < length; i++) {
     const row = startRow + i * dRow;
     const col = startCol + i * dCol;
 
@@ -281,14 +321,15 @@ function canTeamCompleteSequence(
   teamIndex: number,
   lockedCells: Set<string>,
   sequencesCompleted: number,
-  allLockedCells: Map<number, Set<string>>
+  allLockedCells: Map<number, Set<string>>,
+  sequenceLength: number
 ): boolean {
-  // Check all possible 5-cell lines on the board
+  // Check all possible N-cell lines on the board
   for (const [dRow, dCol] of DIRECTIONS) {
     for (let startRow = 0; startRow < 10; startRow++) {
       for (let startCol = 0; startCol < 10; startCol++) {
-        // Check if 5-cell line starting here is valid
-        const line = getLineOfFive(startRow, startCol, dRow, dCol);
+        // Check if N-cell line starting here is valid
+        const line = getLineOfN(startRow, startCol, dRow, dCol, sequenceLength);
         if (!line) continue;
 
         const canComplete = canCompleteLineAsSequence(
@@ -322,6 +363,7 @@ function canTeamCompleteSequence(
 export function checkStalemate(gameState: GameState): StalemateResult {
   const { config, boardChips, lockedCells, sequencesCompleted, sequenceTimestamps } = gameState;
   const teamCount = config.teamCount;
+  const sequenceLength = config.sequenceLength;
 
   // Get current sequence counts
   const sequenceCounts: number[] = [];
@@ -338,7 +380,7 @@ export function checkStalemate(gameState: GameState): StalemateResult {
 
     const teamLockedCells = lockedCells.get(teamIndex) || new Set<string>();
 
-    if (canTeamCompleteSequence(boardChips, teamIndex, teamLockedCells, completed, lockedCells)) {
+    if (canTeamCompleteSequence(boardChips, teamIndex, teamLockedCells, completed, lockedCells, sequenceLength)) {
       canAnyTeamScore = true;
       break;
     }
@@ -479,6 +521,11 @@ export function applyMove(
 
     gameState.deadCardReplacedThisTurn = true;
 
+    // Log event
+    logEvent(gameState, createGameEvent('card-replaced', player, {
+      card: deadAction.card,
+    }));
+
     return result;
   }
 
@@ -495,12 +542,28 @@ export function applyMove(
 
   // Execute the action
   if (playAction.type === 'play-one-eyed') {
+    // Get opponent's team index before removing
+    const targetTeamIndex = gameState.boardChips[playAction.targetRow][playAction.targetCol] as number;
+
     // Remove opponent's chip
     gameState.boardChips[playAction.targetRow][playAction.targetCol] = null;
     gameState.lastRemovedCell = [playAction.targetRow, playAction.targetCol];
+
+    // Log removal event
+    logEvent(gameState, createGameEvent('chip-removed', player, {
+      card: playAction.card,
+      position: [playAction.targetRow, playAction.targetCol],
+      targetTeamIndex,
+    }));
   } else {
     // Place our chip
     gameState.boardChips[playAction.targetRow][playAction.targetCol] = player.teamIndex;
+
+    // Log placement event
+    logEvent(gameState, createGameEvent('chip-placed', player, {
+      card: playAction.card,
+      position: [playAction.targetRow, playAction.targetCol],
+    }));
 
     // Check for new sequences
     const teamLockedCells = gameState.lockedCells.get(player.teamIndex) || new Set<string>();
@@ -513,7 +576,8 @@ export function applyMove(
       player.teamIndex,
       teamLockedCells,
       sequencesCompleted,
-      gameState.config.sequencesToWin
+      gameState.config.sequencesToWin,
+      gameState.config.sequenceLength
     );
 
     if (newSequences.length > 0) {
@@ -536,6 +600,11 @@ export function applyMove(
       gameState.completedSequences.push(sequence);
 
       result.newSequences = [sequence];
+
+      // Log sequence completed event
+      logEvent(gameState, createGameEvent('sequence-completed', player, {
+        sequenceCount: newCount,
+      }));
 
       // Check win condition
       if (newCount >= gameState.config.sequencesToWin) {
