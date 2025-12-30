@@ -537,3 +537,152 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Mobile Optimizations */
+@media (max-width: 480px) {
+  .lobby-header {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .lobby-header h1 {
+    font-size: 1.1rem;
+  }
+
+  .header-spacer {
+    width: 50px;
+  }
+
+  .lobby-content {
+    padding: var(--space-md);
+    gap: var(--space-md);
+  }
+
+  .room-code-card {
+    padding: var(--space-md);
+  }
+
+  .room-code-value {
+    font-size: 2rem;
+  }
+
+  .teams-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .team-card {
+    margin-bottom: 0;
+  }
+
+  .team-header {
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .team-name {
+    font-size: 0.85rem;
+  }
+
+  .team-letter {
+    font-size: 1rem;
+  }
+
+  .team-player {
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .team-player .player-name {
+    font-size: 0.85rem;
+  }
+
+  .game-info {
+    flex-wrap: wrap;
+  }
+
+  .info-item {
+    flex: 1 1 calc(50% - var(--space-sm));
+    min-width: 0;
+    padding: var(--space-sm);
+  }
+
+  .info-label {
+    font-size: 0.7rem;
+  }
+
+  .info-value {
+    font-size: 0.9rem;
+  }
+
+  .settings-section {
+    padding: var(--space-sm);
+  }
+
+  .settings-section h3 {
+    font-size: 0.85rem;
+  }
+
+  .time-limit-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-xs);
+  }
+
+  .time-option-btn {
+    padding: var(--space-xs);
+    font-size: 0.75rem;
+    text-align: center;
+  }
+
+  .sequences-options {
+    gap: var(--space-xs);
+  }
+
+  .sequences-option-btn {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 1rem;
+  }
+
+  .btn-lg {
+    padding: var(--space-md) var(--space-lg);
+    font-size: 1rem;
+  }
+
+  .waiting-message {
+    padding: var(--space-md);
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .room-code-value {
+    font-size: 1.75rem;
+    letter-spacing: 0.1em;
+  }
+
+  .room-code-actions {
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+
+  .room-code-actions .btn {
+    width: 100%;
+  }
+
+  .teams-header h2 {
+    font-size: 1rem;
+  }
+
+  .player-count {
+    font-size: 0.8rem;
+  }
+
+  .time-limit-options {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .info-item {
+    flex: 1 1 100%;
+  }
+
+  .game-info {
+    gap: var(--space-xs);
+  }
+}

@@ -240,3 +240,83 @@
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* Additional mobile optimizations for very narrow screens */
+@media (max-width: 360px) {
+  .home-screen {
+    padding: var(--space-md);
+  }
+
+  .home-content {
+    gap: var(--space-md);
+  }
+
+  .logo-icon {
+    width: 100px;
+    height: 100px;
+    border-radius: 22px;
+  }
+
+  .logo-s {
+    font-size: 52px;
+  }
+
+  .logo-title {
+    font-size: 2rem;
+  }
+
+  .logo-subtitle {
+    font-size: 1rem;
+  }
+
+  .player-count-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .player-count-btn {
+    padding: var(--space-sm);
+    font-size: 1rem;
+  }
+
+  .sequences-to-win-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sequences-btn {
+    padding: var(--space-sm);
+    font-size: 0.85rem;
+  }
+
+  .time-limit-btn {
+    font-size: 0.75rem;
+    padding: var(--space-xs);
+  }
+
+  .room-code-input {
+    font-size: 1.25rem;
+    letter-spacing: 0.15em;
+  }
+
+  .form-group label {
+    font-size: 0.9rem;
+  }
+
+  .form-hint {
+    font-size: 0.8rem;
+  }
+
+  .btn-lg {
+    padding: var(--space-md) var(--space-lg);
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 320px) {
+  .player-count-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .time-limit-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
