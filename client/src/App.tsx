@@ -4,7 +4,7 @@ import { HomeScreen } from './components/HomeScreen';
 import { LobbyScreen } from './components/LobbyScreen';
 import { GameScreen } from './components/GameScreen';
 import { Toast } from './components/Toast';
-import type { TurnTimeLimit } from '../../shared/types';
+import type { TurnTimeLimit, SequencesToWin } from '../../shared/types';
 
 type Screen = 'home' | 'lobby' | 'game';
 
@@ -15,9 +15,16 @@ const STORAGE_KEYS = {
   playerId: 'sequence_player_id',
 };
 
+// Get room code from URL
+function getRoomCodeFromURL(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('room') || params.get('code') || null;
+}
+
 function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const [urlRoomCode] = useState<string | null>(getRoomCodeFromURL);
 
   const {
     connected,
@@ -58,6 +65,10 @@ function App() {
           localStorage.removeItem(STORAGE_KEYS.playerId);
         } else {
           setPlayerId(result.playerId);
+          // Clear URL param after successful reconnect
+          if (urlRoomCode) {
+            window.history.replaceState({}, '', window.location.pathname);
+          }
           if (result.gameState) {
             setScreen('game');
           } else {
@@ -66,7 +77,7 @@ function App() {
         }
       });
     }
-  }, [connected, reconnect]);
+  }, [connected, reconnect, urlRoomCode]);
 
   // Update screen based on game state
   useEffect(() => {
@@ -92,8 +103,8 @@ function App() {
   };
 
   // Handle creating a room
-  const handleCreateRoom = async (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit) => {
-    const result = await createRoom(roomName, playerName, maxPlayers, teamCount, turnTimeLimit);
+  const handleCreateRoom = async (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit, sequencesToWin: SequencesToWin) => {
+    const result = await createRoom(roomName, playerName, maxPlayers, teamCount, turnTimeLimit, sequencesToWin);
     if ('error' in result) {
       return result;
     }
@@ -109,6 +120,10 @@ function App() {
       return result;
     }
     saveSession(roomCode.toUpperCase(), result.token, result.playerId);
+    // Clear URL param after successful join
+    if (urlRoomCode) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
     setScreen('lobby');
     return result;
   };
@@ -156,6 +171,7 @@ function App() {
         <HomeScreen
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
+          initialRoomCode={urlRoomCode || undefined}
         />
       )}
 

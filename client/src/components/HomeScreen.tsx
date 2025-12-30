@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN } from '../../../shared/types';
 import './HomeScreen.css';
 
 interface HomeScreenProps {
   onCreateRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit, sequencesToWin: SequencesToWin) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
   onJoinRoom: (roomCode: string, playerName: string) => Promise<{ roomInfo?: unknown; playerId?: string; token?: string; error?: string }>;
+  initialRoomCode?: string;
 }
 
-export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
+export function HomeScreen({ onCreateRoom, onJoinRoom, initialRoomCode }: HomeScreenProps) {
   const [mode, setMode] = useState<'home' | 'create' | 'join'>('home');
   const [roomName, setRoomName] = useState('');
   const [playerName, setPlayerName] = useState('');
@@ -17,6 +18,14 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
   const [sequencesToWin, setSequencesToWin] = useState<SequencesToWin>(DEFAULT_SEQUENCES_TO_WIN);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // If initialRoomCode is provided, go directly to join screen
+  useEffect(() => {
+    if (initialRoomCode) {
+      setRoomCode(initialRoomCode.toUpperCase());
+      setMode('join');
+    }
+  }, [initialRoomCode]);
 
   const handleCreate = async () => {
     if (!playerName.trim()) {
@@ -60,6 +69,15 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
     }
   };
 
+  const handleBack = () => {
+    setMode('home');
+    setError(null);
+    // Clear URL parameter when going back
+    if (initialRoomCode) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  };
+
   const renderHome = () => (
     <div className="home-content animate-fade-in">
       <div className="home-logo">
@@ -97,7 +115,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
 
   const renderCreate = () => (
     <div className="home-content animate-fade-in">
-      <button className="back-button" onClick={() => { setMode('home'); setError(null); }}>
+      <button className="back-button" onClick={handleBack}>
         ← Back
       </button>
 
@@ -136,7 +154,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
           {VALID_PLAYER_COUNTS.map((count) => (
             <button
               key={count}
-              className={`player-count-btn ${maxPlayers === count ? 'active' : ''}`}
+              className={"player-count-btn " + (maxPlayers === count ? 'active' : '')}
               onClick={() => setMaxPlayers(count)}
             >
               {count}
@@ -145,8 +163,8 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
         </div>
         <p className="form-hint">
           {maxPlayers <= 3
-            ? `${maxPlayers} individual players`
-            : `${maxPlayers} players in ${maxPlayers % 2 === 0 ? '2' : '3'} teams`}
+            ? maxPlayers + ' individual players'
+            : maxPlayers + ' players in ' + (maxPlayers % 2 === 0 ? '2' : '3') + ' teams'}
         </p>
       </div>
 
@@ -156,7 +174,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
           {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
             <button
               key={option.value}
-              className={`sequences-btn ${sequencesToWin === option.value ? 'active' : ''}`}
+              className={"sequences-btn " + (sequencesToWin === option.value ? 'active' : '')}
               onClick={() => setSequencesToWin(option.value)}
             >
               {option.label}
@@ -174,7 +192,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
           {TURN_TIME_OPTIONS.map((option) => (
             <button
               key={option.value}
-              className={`time-limit-btn ${turnTimeLimit === option.value ? 'active' : ''}`}
+              className={"time-limit-btn " + (turnTimeLimit === option.value ? 'active' : '')}
               onClick={() => setTurnTimeLimit(option.value)}
             >
               {option.label}
@@ -184,7 +202,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
         <p className="form-hint">
           {turnTimeLimit === 0
             ? 'Players can take as long as they want'
-            : `Players have ${turnTimeLimit} seconds per turn`}
+            : 'Players have ' + turnTimeLimit + ' seconds per turn'}
         </p>
       </div>
 
@@ -202,11 +220,17 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
 
   const renderJoin = () => (
     <div className="home-content animate-fade-in">
-      <button className="back-button" onClick={() => { setMode('home'); setError(null); }}>
+      <button className="back-button" onClick={handleBack}>
         ← Back
       </button>
 
       <h2>Join Game</h2>
+
+      {initialRoomCode && (
+        <div className="invite-banner">
+          You've been invited to join a game!
+        </div>
+      )}
 
       <div className="form-group">
         <label htmlFor="name">Your Name</label>
@@ -218,6 +242,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
           placeholder="Enter your name"
           maxLength={20}
           autoComplete="off"
+          autoFocus={!!initialRoomCode}
         />
       </div>
 
@@ -232,6 +257,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom }: HomeScreenProps) {
           maxLength={6}
           autoComplete="off"
           className="room-code-input"
+          readOnly={!!initialRoomCode}
         />
       </div>
 

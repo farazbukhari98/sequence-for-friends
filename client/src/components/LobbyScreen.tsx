@@ -80,7 +80,7 @@ export function LobbyScreen({
     const shareData = {
       title: 'Join my Sequence game!',
       text: `Join my Sequence game "${roomInfo.name}"! Room code: ${roomInfo.code}`,
-      url: window.location.href,
+      url: window.location.origin + window.location.pathname + "?room=" + roomInfo.code,
     };
 
     if (navigator.share) {
