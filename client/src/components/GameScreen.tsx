@@ -437,6 +437,7 @@ export function GameScreen({
       {/* Winner Modal */}
       {gameState.winnerTeamIndex !== null && (
         <WinnerModal
+          completedSequences={gameState.completedSequences}
           winnerTeamIndex={gameState.winnerTeamIndex}
           teamColors={gameState.config.teamColors}
           players={gameState.players}
@@ -561,8 +562,82 @@ function SequenceCelebrationModal({ teamColor, playerNames, onDismiss }: Sequenc
   );
 }
 
+// Sequence Recap Board for Winner Modal
+interface SequenceRecapBoardProps {
+  completedSequences: SequenceLine[];
+  winnerTeamIndex: number;
+  teamColor: TeamColor;
+}
+
+function SequenceRecapBoard({ completedSequences, winnerTeamIndex, teamColor }: SequenceRecapBoardProps) {
+  // Filter to only winning team's sequences
+  const winningSequences = useMemo(() => 
+    completedSequences.filter(seq => seq.teamIndex === winnerTeamIndex),
+    [completedSequences, winnerTeamIndex]
+  );
+
+  // Build a map of cells that are part of winning sequences (cellKey -> sequence index)
+  const winningCells = useMemo(() => {
+    const cells = new Map<string, number>();
+    winningSequences.forEach((seq, seqIndex) => {
+      seq.cells.forEach(([row, col]) => {
+        const key = `${row},${col}`;
+        if (!cells.has(key)) {
+          cells.set(key, seqIndex);
+        }
+      });
+    });
+    return cells;
+  }, [winningSequences]);
+
+  return (
+    <div className="sequence-recap-section">
+      <h3 className="sequence-recap-title">Winning Sequences</h3>
+      <div className="sequence-recap-board">
+        {Array.from({ length: 10 }).map((_, rowIndex) => (
+          <div key={rowIndex} className="sequence-recap-row">
+            {Array.from({ length: 10 }).map((_, colIndex) => {
+              const cellKey = `${rowIndex},${colIndex}`;
+              const isWinningCell = winningCells.has(cellKey);
+              const seqIndex = winningCells.get(cellKey) ?? 0;
+              const isCornerCell = isCorner(rowIndex, colIndex);
+
+              return (
+                <div
+                  key={cellKey}
+                  className={`sequence-recap-cell ${isWinningCell ? 'winning' : ''} ${isCornerCell ? 'corner' : ''}`}
+                  style={isWinningCell ? { animationDelay: `${seqIndex * 0.3}s` } : undefined}
+                >
+                  {isWinningCell && (
+                    <div
+                      className="sequence-recap-chip"
+                      style={{
+                        backgroundColor: getTeamColorHex(teamColor),
+                        animationDelay: `${seqIndex * 0.3}s`,
+                      }}
+                    >
+                      {getTeamLetter(teamColor)}
+                    </div>
+                  )}
+                  {isCornerCell && !isWinningCell && (
+                    <span className="sequence-recap-corner">★</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="sequence-recap-count">
+        {winningSequences.length} sequence{winningSequences.length !== 1 ? 's' : ''} completed
+      </p>
+    </div>
+  );
+}
+
 // Winner Modal
 interface WinnerModalProps {
+  completedSequences: SequenceLine[];
   winnerTeamIndex: number;
   teamColors: TeamColor[];
   players: PublicPlayer[];
@@ -570,7 +645,7 @@ interface WinnerModalProps {
   onLeave: () => void;
 }
 
-function WinnerModal({ winnerTeamIndex, teamColors, players, myTeamIndex, onLeave }: WinnerModalProps) {
+function WinnerModal({ completedSequences, winnerTeamIndex, teamColors, players, myTeamIndex, onLeave }: WinnerModalProps) {
   const isWinner = winnerTeamIndex === myTeamIndex;
   const winnerColor = teamColors[winnerTeamIndex];
   const winningPlayers = players.filter(p => p.teamIndex === winnerTeamIndex);
@@ -615,6 +690,13 @@ function WinnerModal({ winnerTeamIndex, teamColors, players, myTeamIndex, onLeav
           </span>
           Team {winnerColor.toUpperCase()} Wins!
         </div>
+
+        {/* Sequence Recap */}
+        <SequenceRecapBoard
+          completedSequences={completedSequences}
+          winnerTeamIndex={winnerTeamIndex}
+          teamColor={winnerColor}
+        />
 
         <div className="winner-players">
           {winningPlayers.map(p => p.name).join(' & ')}

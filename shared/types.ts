@@ -131,11 +131,12 @@ export type GamePhase = 'lobby' | 'cutting' | 'playing' | 'finished';
 // TURN TIME LIMIT
 // ============================================
 
-export type TurnTimeLimit = 0 | 30 | 60 | 90 | 120; // 0 = no limit, values in seconds
+export type TurnTimeLimit = 0 | 30 | 45 | 60 | 90 | 120; // 0 = no limit, values in seconds
 
 export const TURN_TIME_OPTIONS: { value: TurnTimeLimit; label: string }[] = [
   { value: 0, label: 'No Limit' },
   { value: 30, label: '30 seconds' },
+  { value: 45, label: '45 seconds' },
   { value: 60, label: '1 minute' },
   { value: 90, label: '90 seconds' },
   { value: 120, label: '2 minutes' },

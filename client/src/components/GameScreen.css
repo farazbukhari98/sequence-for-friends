@@ -16,7 +16,7 @@
   padding: var(--space-sm) var(--space-md);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  min-height: 52px;
+  min-height: 44px;
 }
 
 .game-header-left,
@@ -193,7 +193,7 @@
 
 /* Action Bar */
 .action-bar {
-  min-height: 56px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -581,5 +581,123 @@
   .action-bar {
     min-height: 48px;
     padding: var(--space-xs) var(--space-md);
+  }
+}
+
+/* ========================== */
+/* Sequence Recap Board */
+/* ========================== */
+
+.sequence-recap-section {
+  margin: var(--space-md) 0;
+}
+
+.sequence-recap-title {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-sm);
+  font-weight: 500;
+  text-align: center;
+}
+
+.sequence-recap-board {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  padding: 6px;
+  border-radius: var(--border-radius-md);
+  margin: 0 auto;
+  width: fit-content;
+}
+
+.sequence-recap-row {
+  display: flex;
+  gap: 2px;
+}
+
+.sequence-recap-cell {
+  width: 18px;
+  height: 18px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.sequence-recap-cell.corner {
+  background: linear-gradient(135deg, #d4a843, #a88720);
+}
+
+.sequence-recap-corner {
+  font-size: 8px;
+  color: var(--bg-primary);
+  opacity: 0.7;
+}
+
+.sequence-recap-cell.winning {
+  animation: recapCellReveal 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes recapCellReveal {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.sequence-recap-chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  font-weight: 700;
+  color: var(--bg-primary);
+  box-shadow: 0 0 6px currentColor;
+  animation: recapChipGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes recapChipGlow {
+  0%, 100% {
+    box-shadow: 0 0 4px currentColor;
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 8px currentColor, 0 0 12px currentColor;
+    transform: scale(1.05);
+  }
+}
+
+.sequence-recap-count {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: var(--space-sm);
+}
+
+/* Mobile adjustments for recap */
+@media (max-width: 360px) {
+  .sequence-recap-cell {
+    width: 16px;
+    height: 16px;
+  }
+
+  .sequence-recap-chip {
+    width: 12px;
+    height: 12px;
+    font-size: 6px;
   }
 }
