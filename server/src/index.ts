@@ -9,6 +9,8 @@ import type {
   ServerToClientEvents,
   GameAction,
   TeamSwitchRequest,
+  EmoteType,
+  QuickMessageType,
 } from '../../shared/types.js';
 
 import {
@@ -73,6 +75,32 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 // Serve the built client (always in production, optionally in dev)
 // The compiled server is at dist/server/src/, so we need to go up to project root
 const clientPath = path.join(__dirname, '../../../../client/dist');
+
+// Apple App Site Association for Universal Links
+// This file must be served with correct content type for iOS to recognize it
+app.get('/.well-known/apple-app-site-association', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.json({
+    applinks: {
+      apps: [],
+      details: [
+        {
+          appID: 'YBLLF949FK.com.chiplaneapp.ChipLane',
+          paths: ['/join/*', '/invite/*'],
+        },
+      ],
+    },
+  });
+});
+
+// Also support /join/:code route for Universal Links
+// This will redirect to the app or show the web app
+app.get('/join/:code', (req, res) => {
+  const roomCode = req.params.code.toUpperCase().replace('-', '');
+  // For web users, redirect to the main app with the room code
+  res.redirect(`/?join=${roomCode}`);
+});
+
 app.use(express.static(clientPath));
 app.get('*', (req, res) => {
   res.sendFile(path.join(clientPath, 'index.html'));
