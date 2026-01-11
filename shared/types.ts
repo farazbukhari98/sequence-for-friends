@@ -395,6 +395,26 @@ export interface TeamSwitchRequest {
   toTeamIndex: number;
 }
 
+// ============================================
+// EMOTES & QUICK MESSAGES
+// ============================================
+
+export type EmoteType = 'thumbs-up' | 'clap' | 'fire' | 'thinking' | 'laugh' | 'cry' | 'angry' | 'heart';
+
+export type QuickMessageType = 'good-game' | 'nice-move' | 'oops' | 'hurry-up' | 'well-played' | 'rematch';
+
+export interface EmoteData {
+  playerId: string;
+  playerName: string;
+  emote: EmoteType;
+}
+
+export interface QuickMessageData {
+  playerId: string;
+  playerName: string;
+  message: QuickMessageType;
+}
+
 // Client -> Server events
 export interface ClientToServerEvents {
   'create-room': (data: { roomName: string; playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }, callback: (response: CreateRoomResponse) => void) => void;
@@ -410,6 +430,8 @@ export interface ClientToServerEvents {
   'respond-team-switch': (data: { playerId: string; approved: boolean }, callback: (response: { success: boolean; error?: string }) => void) => void;
   'continue-series': (callback: (response: { success: boolean; error?: string }) => void) => void; // Continue to next game in series
   'end-series': (callback: (response: { success: boolean; error?: string }) => void) => void; // End series early, return to lobby
+  'send-emote': (emote: EmoteType) => void;
+  'send-quick-message': (message: QuickMessageType) => void;
 }
 
 // Server -> Client events
@@ -428,6 +450,8 @@ export interface ServerToClientEvents {
   'team-switch-request': (request: TeamSwitchRequest) => void;
   'team-switch-response': (data: { playerId: string; approved: boolean; playerName: string }) => void;
   'game-mode-changed': (data: { modes: string[]; changedBy: string; settings: { sequenceLength: number; turnTimeLimit: number; seriesLength: number } }) => void;
+  'emote-received': (data: EmoteData) => void;
+  'quick-message-received': (data: QuickMessageData) => void;
 }
 
 // Response types
