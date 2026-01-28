@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(/dev/null cd \"/Users/farazbukhari/Documents/Documents - Faraz''''s MacBook Pro (2)/SequenceForFriends\")",
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git fetch:*)",
+      "Bash(md5:*)",
+      "Bash(npm run build:server:*)",
+      "Bash(cd:*)"
+    ]
+  }
+}
