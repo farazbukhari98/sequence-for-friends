@@ -672,10 +672,12 @@ io.on('connection', (socket) => {
 
     callback({ success: true });
 
-    // Send new game state to all players
+    // Send new game state to each player individually (each sees their own hand)
     for (const player of room.players) {
-      const clientState = toClientGameState(result, player.id);
-      io.to(playerInfo.roomCode).emit('game-state-updated', clientState);
+      const playerSocket = findSocketByPlayerId(player.id);
+      if (playerSocket) {
+        playerSocket.emit('game-state-updated', toClientGameState(result, player.id));
+      }
     }
 
     // Start turn timer if applicable

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSocket } from './hooks/useSocket';
 import { HomeScreen } from './components/HomeScreen';
 import { LobbyScreen } from './components/LobbyScreen';
@@ -47,6 +47,8 @@ function App() {
     toggleReady,
     requestTeamSwitch,
     respondTeamSwitch,
+    continueSeries,
+    endSeries,
     clearError,
     clearTeamSwitchRequest,
     clearGameModeInfo,
@@ -137,6 +139,23 @@ function App() {
     setScreen('home');
   };
 
+  // Return to lobby without leaving the room (used after series ends)
+  const handleReturnToLobby = useCallback(() => {
+    setScreen('lobby');
+  }, []);
+
+  // Auto-transition from game to lobby when room phase changes to 'waiting'
+  // (e.g., when end-series is called). Skip if series was just won so the
+  // WinnerModal can display the "Series Complete" state first.
+  useEffect(() => {
+    if (roomInfo && roomInfo.phase === 'waiting' && screen === 'game') {
+      const seriesJustWon = roomInfo.seriesState?.seriesWinnerTeamIndex != null;
+      if (!seriesJustWon) {
+        setScreen('lobby');
+      }
+    }
+  }, [roomInfo, screen]);
+
   // Handle starting the game
   const handleStartGame = async () => {
     const result = await startGame();
@@ -202,8 +221,12 @@ function App() {
           playerId={playerId}
           cutCards={cutCards}
           turnTimeoutInfo={turnTimeoutInfo}
+          roomInfo={roomInfo}
           onAction={sendAction}
           onLeave={handleLeaveRoom}
+          onContinueSeries={continueSeries}
+          onEndSeries={endSeries}
+          onReturnToLobby={handleReturnToLobby}
         />
       )}
 

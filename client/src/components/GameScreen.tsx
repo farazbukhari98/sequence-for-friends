@@ -8,6 +8,8 @@ import type {
   TeamColor,
   SequenceLine,
   PublicPlayer,
+  RoomInfo,
+  SeriesState,
 } from '../../../shared/types';
 import {
   findCardPositions,
@@ -27,8 +29,12 @@ interface GameScreenProps {
   playerId: string;
   cutCards: CutCard[] | null;
   turnTimeoutInfo: { playerIndex: number; playerName: string } | null;
+  roomInfo: RoomInfo | null;
   onAction: (action: GameAction) => Promise<MoveResult>;
   onLeave: () => void;
+  onContinueSeries: () => Promise<{ success: boolean; error?: string }>;
+  onEndSeries: () => Promise<{ success: boolean; error?: string }>;
+  onReturnToLobby: () => void;
 }
 
 type GameStep = 'select-card' | 'select-target' | 'confirm' | 'draw';
@@ -45,8 +51,12 @@ export function GameScreen({
   playerId,
   cutCards,
   turnTimeoutInfo,
+  roomInfo,
   onAction,
   onLeave,
+  onContinueSeries,
+  onEndSeries,
+  onReturnToLobby,
 }: GameScreenProps) {
   const [selectedCard, setSelectedCard] = useState<CardCode | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<[number, number] | null>(null);
@@ -442,7 +452,12 @@ export function GameScreen({
           teamColors={gameState.config.teamColors}
           players={gameState.players}
           myTeamIndex={myPlayer?.teamIndex ?? -1}
+          seriesState={roomInfo?.seriesState ?? null}
+          isHost={roomInfo?.hostId === playerId}
           onLeave={onLeave}
+          onContinueSeries={onContinueSeries}
+          onEndSeries={onEndSeries}
+          onReturnToLobby={onReturnToLobby}
         />
       )}
     </div>
@@ -642,13 +657,49 @@ interface WinnerModalProps {
   teamColors: TeamColor[];
   players: PublicPlayer[];
   myTeamIndex: number;
+  seriesState: SeriesState | null;
+  isHost: boolean;
   onLeave: () => void;
+  onContinueSeries: () => Promise<{ success: boolean; error?: string }>;
+  onEndSeries: () => Promise<{ success: boolean; error?: string }>;
+  onReturnToLobby: () => void;
 }
 
-function WinnerModal({ completedSequences, winnerTeamIndex, teamColors, players, myTeamIndex, onLeave }: WinnerModalProps) {
+function WinnerModal({
+  completedSequences, winnerTeamIndex, teamColors, players, myTeamIndex,
+  seriesState, isHost, onLeave, onContinueSeries, onEndSeries, onReturnToLobby,
+}: WinnerModalProps) {
+  const [loading, setLoading] = useState(false);
   const isWinner = winnerTeamIndex === myTeamIndex;
   const winnerColor = teamColors[winnerTeamIndex];
   const winningPlayers = players.filter(p => p.teamIndex === winnerTeamIndex);
+
+  const isSeries = seriesState !== null;
+  const isSeriesOver = seriesState?.seriesWinnerTeamIndex != null;
+
+  // Project the score: seriesState.teamWins doesn't include this game's result yet
+  // (it gets recorded when host calls continue-series). In State C (series over),
+  // the server has already recorded the win, so teamWins is accurate.
+  const displayWins = seriesState
+    ? seriesState.teamWins.map((wins, i) =>
+        !isSeriesOver && i === winnerTeamIndex ? wins + 1 : wins
+      )
+    : [];
+  const displayGamesPlayed = seriesState
+    ? (isSeriesOver ? seriesState.gamesPlayed : seriesState.gamesPlayed + 1)
+    : 0;
+
+  const handleContinue = async () => {
+    setLoading(true);
+    await onContinueSeries();
+    setLoading(false);
+  };
+
+  const handleEndSeries = async () => {
+    setLoading(true);
+    await onEndSeries();
+    setLoading(false);
+  };
 
   return (
     <div className="modal-overlay winner-overlay">
@@ -676,10 +727,12 @@ function WinnerModal({ completedSequences, winnerTeamIndex, teamColors, players,
             boxShadow: `0 0 30px ${getTeamColorHex(winnerColor)}, 0 0 60px ${getTeamColorHex(winnerColor)}50`
           }}
         >
-          {isWinner ? '🏆' : '🎉'}
+          {isSeriesOver ? '🏆' : isWinner ? '🏆' : '🎉'}
         </div>
 
-        <h2 className="winner-title">{isWinner ? 'Victory!' : 'Game Over!'}</h2>
+        <h2 className="winner-title">
+          {isSeriesOver ? 'Series Complete!' : isWinner ? 'Victory!' : 'Game Over!'}
+        </h2>
 
         <div
           className="winner-team-badge"
@@ -688,8 +741,39 @@ function WinnerModal({ completedSequences, winnerTeamIndex, teamColors, players,
           <span className="winner-team-letter" style={{ color: getTeamColorHex(winnerColor) }}>
             {getTeamLetter(winnerColor)}
           </span>
-          Team {winnerColor.toUpperCase()} Wins!
+          {isSeriesOver
+            ? `Team ${winnerColor.toUpperCase()} wins the series!`
+            : `Team ${winnerColor.toUpperCase()} Wins!`}
         </div>
+
+        {/* Series Score */}
+        {isSeries && seriesState && (
+          <div className="series-score-section">
+            {!isSeriesOver && (
+              <div className="series-game-label">
+                Game {displayGamesPlayed} of {seriesState.seriesLength}
+              </div>
+            )}
+            <div className="series-score-display">
+              {teamColors.map((color, index) => (
+                <div key={color} className="series-team-score">
+                  <div
+                    className="series-team-chip"
+                    style={{ backgroundColor: getTeamColorHex(color) }}
+                  >
+                    {getTeamLetter(color)}
+                  </div>
+                  <span className="series-team-wins">{displayWins[index] ?? 0}</span>
+                </div>
+              ))}
+            </div>
+            <div className="series-info">
+              {isSeriesOver
+                ? `Best of ${seriesState.seriesLength}`
+                : `First to ${Math.ceil(seriesState.seriesLength / 2)} wins`}
+            </div>
+          </div>
+        )}
 
         {/* Sequence Recap */}
         <SequenceRecapBoard
@@ -703,12 +787,50 @@ function WinnerModal({ completedSequences, winnerTeamIndex, teamColors, players,
         </div>
 
         <p className="winner-message">
-          {isWinner ? 'Congratulations on your victory!' : 'Great game! Better luck next time!'}
+          {isSeriesOver
+            ? (isWinner ? 'You won the series!' : 'Great series! Better luck next time!')
+            : (isWinner ? 'Congratulations on your victory!' : 'Great game! Better luck next time!')}
         </p>
 
-        <button className="btn btn-primary btn-lg winner-btn" onClick={onLeave}>
-          Back to Home
-        </button>
+        {/* Buttons */}
+        <div className="winner-buttons">
+          {!isSeries && (
+            <button className="btn btn-primary btn-lg winner-btn" onClick={onLeave}>
+              Back to Home
+            </button>
+          )}
+
+          {isSeries && !isSeriesOver && isHost && (
+            <>
+              <button
+                className="btn btn-primary btn-lg winner-btn"
+                onClick={handleContinue}
+                disabled={loading}
+              >
+                {loading ? 'Starting...' : 'Next Game'}
+              </button>
+              <button
+                className="btn btn-secondary winner-btn-secondary"
+                onClick={handleEndSeries}
+                disabled={loading}
+              >
+                End Series
+              </button>
+            </>
+          )}
+
+          {isSeries && !isSeriesOver && !isHost && (
+            <div className="waiting-for-host">
+              Waiting for host to start next game...
+            </div>
+          )}
+
+          {isSeries && isSeriesOver && (
+            <button className="btn btn-primary btn-lg winner-btn" onClick={onReturnToLobby}>
+              Back to Lobby
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

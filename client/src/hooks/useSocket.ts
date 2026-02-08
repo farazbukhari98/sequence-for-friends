@@ -51,6 +51,8 @@ interface UseSocketReturn {
   toggleReady: () => Promise<{ success: boolean; error?: string }>;
   requestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
   respondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
+  continueSeries: () => Promise<{ success: boolean; error?: string }>;
+  endSeries: () => Promise<{ success: boolean; error?: string }>;
   clearError: () => void;
   clearTurnTimeoutInfo: () => void;
   clearTeamSwitchRequest: () => void;
@@ -341,6 +343,32 @@ export function useSocket(): UseSocketReturn {
     });
   }, []);
 
+  const continueSeries = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!socketRef.current) {
+        resolve({ success: false, error: 'Not connected to server' });
+        return;
+      }
+
+      socketRef.current.emit('continue-series', (response) => {
+        resolve(response);
+      });
+    });
+  }, []);
+
+  const endSeries = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!socketRef.current) {
+        resolve({ success: false, error: 'Not connected to server' });
+        return;
+      }
+
+      socketRef.current.emit('end-series', (response) => {
+        resolve(response);
+      });
+    });
+  }, []);
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -383,6 +411,8 @@ export function useSocket(): UseSocketReturn {
     toggleReady,
     requestTeamSwitch,
     respondTeamSwitch,
+    continueSeries,
+    endSeries,
     clearError,
     clearTurnTimeoutInfo,
     clearTeamSwitchRequest,
