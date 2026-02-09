@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSocket } from './hooks/useSocket';
 import { HomeScreen } from './components/HomeScreen';
 import { LobbyScreen } from './components/LobbyScreen';
@@ -144,17 +144,22 @@ function App() {
     setScreen('lobby');
   }, []);
 
-  // Auto-transition from game to lobby when room phase changes to 'waiting'
-  // (e.g., when end-series is called). Skip if series was just won so the
-  // WinnerModal can display the "Series Complete" state first.
+  // Auto-transition from game to lobby when room phase changes FROM 'in-game'
+  // TO 'waiting' (e.g., when end-series is called). Skip if series was just
+  // won so the WinnerModal can display the "Series Complete" state first.
+  const prevRoomPhaseRef = useRef(roomInfo?.phase);
   useEffect(() => {
-    if (roomInfo && roomInfo.phase === 'waiting' && screen === 'game') {
-      const seriesJustWon = roomInfo.seriesState?.seriesWinnerTeamIndex != null;
+    const prevPhase = prevRoomPhaseRef.current;
+    const currentPhase = roomInfo?.phase;
+    prevRoomPhaseRef.current = currentPhase;
+
+    if (prevPhase === 'in-game' && currentPhase === 'waiting') {
+      const seriesJustWon = roomInfo?.seriesState?.seriesWinnerTeamIndex != null;
       if (!seriesJustWon) {
         setScreen('lobby');
       }
     }
-  }, [roomInfo, screen]);
+  }, [roomInfo]);
 
   // Handle starting the game
   const handleStartGame = async () => {
