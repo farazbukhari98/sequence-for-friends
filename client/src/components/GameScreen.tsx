@@ -440,6 +440,7 @@ export function GameScreen({
         <SequenceCelebrationModal
           teamColor={sequenceCelebration.teamColor}
           playerNames={sequenceCelebration.playerNames}
+          sequenceLength={gameState.config.sequenceLength}
           onDismiss={() => setSequenceCelebration(null)}
         />
       )}
@@ -530,10 +531,11 @@ function CutCardsModal({ cutCards, dealerIndex, players, onDismiss }: CutCardsMo
 interface SequenceCelebrationModalProps {
   teamColor: TeamColor;
   playerNames: string[];
+  sequenceLength: number;
   onDismiss: () => void;
 }
 
-function SequenceCelebrationModal({ teamColor, playerNames, onDismiss }: SequenceCelebrationModalProps) {
+function SequenceCelebrationModal({ teamColor, playerNames, sequenceLength, onDismiss }: SequenceCelebrationModalProps) {
   return (
     <div className="modal-overlay celebration-overlay" onClick={onDismiss}>
       <div className="modal-content sequence-celebration-modal" onClick={(e) => e.stopPropagation()}>
@@ -570,7 +572,7 @@ function SequenceCelebrationModal({ teamColor, playerNames, onDismiss }: Sequenc
         </div>
 
         <div className="sequence-celebration-subtitle">
-          scored a 5-chip sequence!
+          scored a {sequenceLength}-chip sequence!
         </div>
       </div>
     </div>
