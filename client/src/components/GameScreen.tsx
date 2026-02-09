@@ -672,6 +672,7 @@ function WinnerModal({
   seriesState, isHost, onLeave, onContinueSeries, onEndSeries, onReturnToLobby,
 }: WinnerModalProps) {
   const [loading, setLoading] = useState(false);
+  const [countdown, setCountdown] = useState(5);
   const isWinner = winnerTeamIndex === myTeamIndex;
   const winnerColor = teamColors[winnerTeamIndex];
   const winningPlayers = players.filter(p => p.teamIndex === winnerTeamIndex);
@@ -691,11 +692,21 @@ function WinnerModal({
     ? (isSeriesOver ? seriesState.gamesPlayed : seriesState.gamesPlayed + 1)
     : 0;
 
-  const handleContinue = async () => {
-    setLoading(true);
-    await onContinueSeries();
-    setLoading(false);
-  };
+  // Auto-continue series: countdown then host auto-starts the next game
+  useEffect(() => {
+    if (!isSeries || isSeriesOver || loading) return;
+
+    if (countdown <= 0) {
+      if (isHost) {
+        setLoading(true);
+        onContinueSeries().finally(() => setLoading(false));
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [isSeries, isSeriesOver, countdown, isHost, loading, onContinueSeries]);
 
   const handleEndSeries = async () => {
     setLoading(true);
@@ -802,29 +813,23 @@ function WinnerModal({
             </button>
           )}
 
-          {isSeries && !isSeriesOver && isHost && (
+          {isSeries && !isSeriesOver && (
             <>
-              <button
-                className="btn btn-primary btn-lg winner-btn"
-                onClick={handleContinue}
-                disabled={loading}
-              >
-                {loading ? 'Starting...' : 'Next Game'}
-              </button>
-              <button
-                className="btn btn-secondary winner-btn-secondary"
-                onClick={handleEndSeries}
-                disabled={loading}
-              >
-                End Series
-              </button>
+              <div className="series-next-countdown">
+                {loading
+                  ? 'Starting next game...'
+                  : `Next game in ${countdown}...`}
+              </div>
+              {isHost && (
+                <button
+                  className="btn btn-secondary winner-btn-secondary"
+                  onClick={handleEndSeries}
+                  disabled={loading}
+                >
+                  End Series
+                </button>
+              )}
             </>
-          )}
-
-          {isSeries && !isSeriesOver && !isHost && (
-            <div className="waiting-for-host">
-              Waiting for host to start next game...
-            </div>
           )}
 
           {isSeries && isSeriesOver && (

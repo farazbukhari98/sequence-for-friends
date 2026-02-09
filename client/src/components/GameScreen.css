@@ -645,6 +645,14 @@
   animation: pulse 2s infinite;
 }
 
+.series-next-countdown {
+  color: var(--accent-primary);
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: var(--space-sm) var(--space-md);
+  text-align: center;
+}
+
 /* Responsive */
 @media (max-height: 700px) {
   .game-header {
