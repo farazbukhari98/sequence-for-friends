@@ -60,7 +60,7 @@ interface UseSocketReturn {
   clearGameModeInfo: () => void;
 }
 
-const SOCKET_URL = import.meta.env.PROD ? '' : 'http://localhost:3001';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
 export function useSocket(): UseSocketReturn {
   const socketRef = useRef<SequenceSocket | null>(null);
@@ -95,6 +95,11 @@ export function useSocket(): UseSocketReturn {
     socket.on('error', (message) => {
       console.error('Server error:', message);
       setError(message);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('Connection error:', err.message);
+      setError('Connection failed: ' + err.message);
     });
 
     socket.on('room-updated', (info) => {
