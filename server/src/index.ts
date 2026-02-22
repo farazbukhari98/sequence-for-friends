@@ -101,6 +101,55 @@ app.get('/join/:code', (req, res) => {
   res.redirect(`/?join=${roomCode}`);
 });
 
+// Privacy Policy page (required for App Store)
+app.get('/privacy', (_req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy - Sequence for Friends</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #e0e0e0; background: #1a1a2e; }
+  h1 { color: #fff; } h2 { color: #ccc; margin-top: 1.5em; }
+  a { color: #6c9bff; }
+</style>
+</head>
+<body>
+<h1>Privacy Policy</h1>
+<p><strong>Last updated:</strong> February 19, 2026</p>
+
+<h2>Overview</h2>
+<p>Sequence for Friends ("the App") is a multiplayer board game. We are committed to protecting your privacy. This policy explains what data we collect and how we use it.</p>
+
+<h2>Data We Collect</h2>
+<p>The App does <strong>not</strong> collect, store, or share any personal information. Specifically:</p>
+<ul>
+<li>No account registration or login is required</li>
+<li>No names, email addresses, or phone numbers are collected</li>
+<li>No analytics or tracking services are used</li>
+<li>No cookies are used for tracking purposes</li>
+<li>No data is sold to third parties</li>
+</ul>
+
+<h2>Gameplay Data</h2>
+<p>When you play, temporary game data (room codes, player display names, and game state) is held in server memory for the duration of your session. This data is automatically deleted when the game room expires and is never written to a database or persistent storage.</p>
+
+<h2>Third-Party Services</h2>
+<p>The App does not integrate with any third-party analytics, advertising, or data collection services.</p>
+
+<h2>Children's Privacy</h2>
+<p>The App does not knowingly collect any personal information from children or any other users.</p>
+
+<h2>Changes to This Policy</h2>
+<p>We may update this Privacy Policy from time to time. Any changes will be posted on this page with an updated date.</p>
+
+<h2>Contact</h2>
+<p>If you have questions about this Privacy Policy, please contact us at <a href="mailto:farazbukhari98@gmail.com">farazbukhari98@gmail.com</a>.</p>
+</body>
+</html>`);
+});
+
 app.use(express.static(clientPath));
 app.get('*', (req, res) => {
   res.sendFile(path.join(clientPath, 'index.html'));

@@ -1,12 +1,10 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.autosolvelabs.sequence',
+  appId: 'com.farazbukhari.sequence',
   appName: 'Sequence for Friends',
   webDir: 'dist',
   server: {
-    // For production, the app connects to the Render-hosted backend
-    // The web app already handles this via relative URLs
     androidScheme: 'https',
     iosScheme: 'https'
   },

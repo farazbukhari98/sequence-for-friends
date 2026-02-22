@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@capacitor/cli": "^8.0.2",
     "@capacitor/core": "^8.0.2",
     "@capacitor/ios": "^8.0.2",
     "react": "^18.2.0",
@@ -17,6 +16,7 @@
     "socket.io-client": "^4.7.4"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.1.0",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^4.2.1",
