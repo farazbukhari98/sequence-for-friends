@@ -60,7 +60,25 @@ interface UseSocketReturn {
   clearGameModeInfo: () => void;
 }
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+const PRODUCTION_URL = 'https://sequence-game-uo5u.onrender.com';
+
+function getSocketUrl(): string {
+  if (import.meta.env.VITE_SOCKET_URL) {
+    return import.meta.env.VITE_SOCKET_URL;
+  }
+  // Capacitor on iOS/Android: hostname is "localhost" but served via native scheme
+  if (import.meta.env.PROD && window.location.hostname === 'localhost') {
+    return PRODUCTION_URL;
+  }
+  // Production web: connect to same origin (server serves the client)
+  if (import.meta.env.PROD) {
+    return window.location.origin;
+  }
+  // Dev mode: local server
+  return 'http://localhost:3001';
+}
+
+const SOCKET_URL = getSocketUrl();
 
 export function useSocket(): UseSocketReturn {
   const socketRef = useRef<SequenceSocket | null>(null);
