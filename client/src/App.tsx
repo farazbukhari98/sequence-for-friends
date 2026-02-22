@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSocket } from './hooks/useSocket';
-import { HomeScreen } from './components/HomeScreen';
-import { LobbyScreen } from './components/LobbyScreen';
-import { GameScreen } from './components/GameScreen';
+import { HomeScreen } from './redesign/components/HomeScreen';
+import { LobbyScreen } from './redesign/components/LobbyScreen';
+import { GameScreen } from './redesign/components/GameScreen';
 import { Toast } from './components/Toast';
 import type { TurnTimeLimit, SequencesToWin } from '../../shared/types';
 

@@ -1,0 +1,457 @@
+.lobby-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-base);
+}
+
+/* Glass Header */
+.lobby-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  background: rgba(10, 10, 10, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-color);
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.lobby-header h1 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+}
+
+.back-button {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--border-radius-full);
+  background: rgba(255,255,255,0.05);
+  transition: all 0.2s ease;
+}
+
+.back-button:hover {
+  background: rgba(255,255,255,0.1);
+  color: white;
+}
+
+.lobby-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  max-width: 768px;
+  width: 100%;
+  margin: 0 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Room Code Card */
+.room-code-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-lg) var(--space-xl);
+  position: relative;
+  overflow: hidden;
+}
+
+.room-code-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent-primary);
+}
+
+.room-code-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.room-code-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.room-code-value {
+  font-family: var(--font-mono);
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: white;
+  letter-spacing: 0.15em;
+  margin-top: 4px;
+}
+
+.room-code-actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* Game Info Dashboard */
+.game-info {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-sm);
+}
+
+.info-item {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.info-value {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: white;
+}
+
+/* Teams Section */
+.teams-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+.teams-header h2 {
+  font-size: 1.25rem;
+  color: white;
+}
+
+.player-count {
+  background: rgba(255,255,255,0.1);
+  padding: 4px 12px;
+  border-radius: var(--border-radius-full);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.teams-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-lg);
+}
+
+.team-card {
+  background: rgba(20, 20, 20, 0.4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+.team-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.team-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: white;
+}
+
+.team-players {
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.team-player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--border-radius-md);
+  transition: all 0.2s ease;
+}
+
+.team-player:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.team-player.ready {
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.player-name {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-badge, .me-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--border-radius-full);
+  letter-spacing: 0.05em;
+}
+
+.host-badge { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
+.me-badge { background: rgba(255, 255, 255, 0.1); color: white; }
+
+.ready-status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.ready-status.is-ready {
+  color: var(--accent-secondary);
+}
+
+.kick-button {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--border-radius-full);
+  background: rgba(255,255,255,0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.kick-button:hover {
+  background: var(--accent-danger);
+  color: white;
+}
+
+.switch-team-btn {
+  width: 100%;
+  padding: var(--space-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.9rem;
+}
+
+.switch-team-btn:hover {
+  color: white;
+  background: rgba(255,255,255,0.02);
+}
+
+/* Settings Section */
+.settings-section {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-lg);
+}
+
+.settings-section h3 {
+  font-size: 1.1rem;
+  margin-bottom: var(--space-lg);
+  color: white;
+}
+
+.setting-group {
+  margin-bottom: var(--space-lg);
+}
+
+.setting-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.time-limit-options, .sequences-options, .presets-options, .game-mode-options, .series-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.time-option-btn, .sequences-option-btn, .preset-btn, .game-mode-btn, .series-option-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius-full);
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.time-option-btn:hover, .sequences-option-btn:hover, .preset-btn:hover, .game-mode-btn:hover, .series-option-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: white;
+}
+
+.time-option-btn.active, .sequences-option-btn.active, .preset-btn.active, .game-mode-btn.active, .series-option-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+/* Start / Ready Buttons Container */
+.action-container {
+  position: sticky;
+  bottom: 0;
+  padding: var(--space-md) 0;
+  background: linear-gradient(to top, var(--bg-base) 60%, transparent);
+  margin-top: auto;
+}
+
+.start-button {
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+}
+
+/* Team Switch Modal */
+.team-switch-modal {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-light);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-lg);
+}
+
+.team-switch-content {
+  text-align: center;
+}
+
+.team-switch-content p {
+  margin: 0 0 var(--space-md) 0;
+  line-height: 1.5;
+}
+
+.team-switch-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: center;
+}
+
+/* Team Switch Response Toast */
+.team-switch-response {
+  padding: var(--space-md);
+  border-radius: var(--border-radius-md);
+  text-align: center;
+  font-weight: 500;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.team-switch-response.approved {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid var(--accent-secondary);
+  color: var(--accent-secondary);
+}
+
+.team-switch-response.denied {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid var(--accent-danger);
+  color: var(--accent-danger);
+}
+
+/* Empty Slots */
+.empty-slots {
+  text-align: center;
+  color: var(--text-muted);
+  padding: var(--space-md);
+  font-size: 0.9rem;
+}
+
+/* Disconnected Badge */
+.disconnected-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--border-radius-full);
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-danger);
+}
+
+/* Team Letter */
+.team-letter {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+/* Waiting Message */
+.waiting-message {
+  text-align: center;
+  color: var(--text-muted);
+  padding: var(--space-md);
+  font-size: 0.9rem;
+}
+
+/* Setting Hint */
+.setting-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+}
+
+/* Header Spacer */
+.header-spacer {
+  width: 60px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .room-code-card {
+    flex-direction: column;
+    text-align: center;
+    gap: var(--space-md);
+  }
+
+  .game-info {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

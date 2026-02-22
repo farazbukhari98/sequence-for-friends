@@ -1,0 +1,292 @@
+import { useState, useEffect } from 'react';
+import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN } from '../../../../shared/types';
+import './HomeScreen.css';
+
+interface HomeScreenProps {
+  onCreateRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit, sequencesToWin: SequencesToWin) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
+  onJoinRoom: (roomCode: string, playerName: string) => Promise<{ roomInfo?: unknown; playerId?: string; token?: string; error?: string }>;
+  initialRoomCode?: string;
+}
+
+export function HomeScreen({ onCreateRoom, onJoinRoom, initialRoomCode }: HomeScreenProps) {
+  const [mode, setMode] = useState<'home' | 'create' | 'join'>('home');
+  const [roomName, setRoomName] = useState('');
+  const [playerName, setPlayerName] = useState('');
+  const [roomCode, setRoomCode] = useState('');
+  const [maxPlayers, setMaxPlayers] = useState(2);
+  const [turnTimeLimit, setTurnTimeLimit] = useState<TurnTimeLimit>(0);
+  const [sequencesToWin, setSequencesToWin] = useState<SequencesToWin>(DEFAULT_SEQUENCES_TO_WIN);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // If initialRoomCode is provided, go directly to join screen
+  useEffect(() => {
+    if (initialRoomCode) {
+      setRoomCode(initialRoomCode.toUpperCase());
+      setMode('join');
+    }
+  }, [initialRoomCode]);
+
+  const handleCreate = async () => {
+    if (!playerName.trim()) {
+      setError('Please enter your name');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    // Determine team count based on player count
+    const teamCount = maxPlayers <= 3 ? maxPlayers : (maxPlayers % 2 === 0 ? 2 : 3);
+
+    // Use room name if provided, otherwise default will be set by server
+    const result = await onCreateRoom(roomName.trim(), playerName.trim(), maxPlayers, teamCount, turnTimeLimit, sequencesToWin);
+    setLoading(false);
+
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleJoin = async () => {
+    if (!playerName.trim()) {
+      setError('Please enter your name');
+      return;
+    }
+    if (!roomCode.trim()) {
+      setError('Please enter a room code');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const result = await onJoinRoom(roomCode.trim().toUpperCase(), playerName.trim());
+    setLoading(false);
+
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleBack = () => {
+    setMode('home');
+    setError(null);
+    // Clear URL parameter when going back
+    if (initialRoomCode) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  };
+
+  const renderHome = () => (
+    <div className="home-content animate-fade-in">
+      <div className="home-logo">
+        <div className="logo-icon">
+          <span className="logo-s">S</span>
+          <div className="logo-chips">
+            <span className="chip chip-blue"></span>
+            <span className="chip chip-green"></span>
+            <span className="chip chip-red"></span>
+          </div>
+        </div>
+        <h1 className="logo-title">Sequence</h1>
+        <p className="logo-subtitle">Classic Edition</p>
+      </div>
+
+      <div className="home-buttons">
+        <button
+          className="btn btn-primary btn-lg w-full"
+          onClick={() => setMode('create')}
+        >
+          Create Game
+        </button>
+        <button
+          className="btn btn-secondary btn-lg w-full"
+          onClick={() => setMode('join')}
+        >
+          Join Game
+        </button>
+      </div>
+
+      <div className="home-footer text-center">
+        <p>The classic card-sequence board game</p>
+      </div>
+    </div>
+  );
+
+  const renderCreate = () => (
+    <div className="home-content animate-fade-in">
+      <div className="form-container create-mode">
+        <button className="back-button" onClick={handleBack}>
+          ← Back
+        </button>
+
+        <h2>Create Game</h2>
+
+        <div className="flex-col gap-lg mt-md">
+          <div className="form-group">
+            <label htmlFor="roomName">Room Name</label>
+            <input
+              id="roomName"
+              type="text"
+              value={roomName}
+              onChange={(e) => setRoomName(e.target.value)}
+              placeholder="e.g., Friday Night Game"
+              maxLength={30}
+              autoComplete="off"
+            />
+            <p className="form-hint">Optional - defaults to "[Your Name]'s Game"</p>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="name">Your Name</label>
+            <input
+              id="name"
+              type="text"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Enter your name"
+              maxLength={20}
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="players">Number of Players</label>
+            <div className="player-count-grid">
+              {VALID_PLAYER_COUNTS.map((count) => (
+                <button
+                  key={count}
+                  className={"player-count-btn " + (maxPlayers === count ? 'active' : '')}
+                  onClick={() => setMaxPlayers(count)}
+                >
+                  {count}
+                </button>
+              ))}
+            </div>
+            <p className="form-hint mt-sm">
+              {maxPlayers <= 3
+                ? maxPlayers + ' individual players'
+                : maxPlayers + ' players in ' + (maxPlayers % 2 === 0 ? '2' : '3') + ' teams'}
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="sequencesToWin">Sequences to Win</label>
+            <div className="sequences-to-win-grid">
+              {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  className={"sequences-btn " + (sequencesToWin === option.value ? 'active' : '')}
+                  onClick={() => setSequencesToWin(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="form-hint mt-sm">
+              First team to complete {sequencesToWin} sequence{sequencesToWin > 1 ? 's' : ''} wins
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="turnTimeLimit">Turn Time Limit</label>
+            <div className="time-limit-grid">
+              {TURN_TIME_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  className={"time-limit-btn " + (turnTimeLimit === option.value ? 'active' : '')}
+                  onClick={() => setTurnTimeLimit(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="form-hint mt-sm">
+              {turnTimeLimit === 0
+                ? 'Players can take as long as they want'
+                : 'Players have ' + turnTimeLimit + ' seconds per turn'}
+            </p>
+          </div>
+
+          {error && <div className="form-error p-md">{error}</div>}
+
+          <button
+            className="btn btn-primary btn-lg w-full mt-md"
+            onClick={handleCreate}
+            disabled={loading}
+          >
+            {loading ? 'Creating...' : 'Create Room'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderJoin = () => (
+    <div className="home-content animate-fade-in">
+      <div className="form-container join-mode">
+        <button className="back-button" onClick={handleBack}>
+          ← Back
+        </button>
+
+        <h2>Join Game</h2>
+
+        <div className="flex-col gap-lg mt-md">
+          {initialRoomCode && (
+            <div className="invite-banner p-md text-center">
+              You've been invited to join a game!
+            </div>
+          )}
+
+          <div className="form-group">
+            <label htmlFor="name">Your Name</label>
+            <input
+              id="name"
+              type="text"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Enter your name"
+              maxLength={20}
+              autoComplete="off"
+              autoFocus={!!initialRoomCode}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="code">Room Code</label>
+            <input
+              id="code"
+              type="text"
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+              placeholder="Enter room code"
+              maxLength={6}
+              autoComplete="off"
+              className="room-code-input text-center"
+              readOnly={!!initialRoomCode}
+            />
+          </div>
+
+          {error && <div className="form-error p-md">{error}</div>}
+
+          <button
+            className="btn btn-primary btn-lg w-full mt-md"
+            onClick={handleJoin}
+            disabled={loading}
+          >
+            {loading ? 'Joining...' : 'Join Room'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="home-screen">
+      {mode === 'home' && renderHome()}
+      {mode === 'create' && renderCreate()}
+      {mode === 'join' && renderJoin()}
+    </div>
+  );
+}

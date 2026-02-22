@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, SequenceLength, SeriesLength, TeamSwitchRequest } from '../../../shared/types';
-import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, SEQUENCE_LENGTH_OPTIONS, SERIES_LENGTH_OPTIONS } from '../../../shared/types';
-import { GameModeModal } from './GameModeModal';
-import type { GameModeType } from './GameModeModal';
-import type { GameModeInfo } from '../hooks/useSocket';
+import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, SequenceLength, SeriesLength, TeamSwitchRequest } from '../../../../shared/types';
+import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, SEQUENCE_LENGTH_OPTIONS, SERIES_LENGTH_OPTIONS } from '../../../../shared/types';
+import { GameModeModal } from '../../components/GameModeModal';
+import type { GameModeType } from '../../components/GameModeModal';
+import type { GameModeInfo } from '../../hooks/useSocket';
 import './LobbyScreen.css';
 
 interface LobbyScreenProps {
@@ -71,7 +71,6 @@ export function LobbyScreen({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = roomInfo.code;
       document.body.appendChild(textArea);
@@ -94,7 +93,7 @@ export function LobbyScreen({
       try {
         await navigator.share(shareData);
       } catch {
-        // User cancelled or error
+        // Ignored
       }
     } else {
       handleCopyCode();
@@ -116,52 +115,38 @@ export function LobbyScreen({
 
   const handleUpdateTurnTimeLimit = async (value: TurnTimeLimit) => {
     const result = await onUpdateSettings({ turnTimeLimit: value });
-    if (result.error) {
-      setError(result.error);
-    }
+    if (result.error) setError(result.error);
   };
 
   const handleUpdateSequencesToWin = async (value: SequencesToWin) => {
     const result = await onUpdateSettings({ sequencesToWin: value });
-    if (result.error) {
-      setError(result.error);
-    }
+    if (result.error) setError(result.error);
   };
 
   const handleUpdateSequenceLength = async (value: SequenceLength) => {
     const result = await onUpdateSettings({ sequenceLength: value });
-    if (result.error) {
-      setError(result.error);
-    }
-  };
-
-  const handleSpeedSequencePreset = async () => {
-    // Speed Sequence: 15s timer + Blitz (4-in-a-row)
-    const result = await onUpdateSettings({
-      turnTimeLimit: 15,
-      sequenceLength: 4
-    });
-    if (result.error) {
-      setError(result.error);
-    }
-  };
-
-  const handleClassicPreset = async () => {
-    // Classic: No timer + Standard (5-in-a-row)
-    const result = await onUpdateSettings({
-      turnTimeLimit: 0,
-      sequenceLength: 5
-    });
-    if (result.error) {
-      setError(result.error);
-    }
+    if (result.error) setError(result.error);
   };
 
   const handleUpdateSeriesLength = async (value: SeriesLength) => {
     const result = await onUpdateSettings({ seriesLength: value });
-    if (result.error) {
-      setError(result.error);
-    }
+    if (result.error) setError(result.error);
+  };
+
+  const handleSpeedSequencePreset = async () => {
+    const result = await onUpdateSettings({
+      turnTimeLimit: 15,
+      sequenceLength: 4
+    });
+    if (result.error) setError(result.error);
+  };
+
+  const handleClassicPreset = async () => {
+    const result = await onUpdateSettings({
+      turnTimeLimit: 0,
+      sequenceLength: 5
+    });
+    if (result.error) setError(result.error);
   };
 
   // Get teams for display
@@ -178,11 +163,20 @@ export function LobbyScreen({
   const teamColors = roomInfo.teamCount === 2 ? ['blue', 'green'] : ['blue', 'green', 'red'];
   const teamNames = ['Blue Team', 'Green Team', 'Red Team'];
 
+  const getClassicColorHex = (color: string) => {
+    switch(color) {
+      case 'blue': return '#2980b9';
+      case 'green': return '#27ae60';
+      case 'red': return '#c0392b';
+      default: return getTeamColorHex(color as 'blue'|'green'|'red');
+    }
+  };
+
   return (
     <div className="lobby-screen">
       <header className="lobby-header">
         <button className="back-button" onClick={onLeave}>
-          ← Leave
+          &larr; Leave
         </button>
         <h1>{roomInfo.name}</h1>
         <div className="header-spacer"></div>
@@ -196,11 +190,11 @@ export function LobbyScreen({
             {roomInfo.code}
           </div>
           <div className="room-code-actions">
-            <button className="btn btn-secondary btn-sm" onClick={handleCopyCode}>
-              {copied ? '✓ Copied!' : 'Copy Code'}
+            <button className="btn btn-sm" onClick={handleCopyCode}>
+              {copied ? '\u2713 COPIED' : 'COPY CODE'}
             </button>
-            <button className="btn btn-secondary btn-sm" onClick={handleShare}>
-              Share
+            <button className="btn btn-sm" onClick={handleShare}>
+              SHARE
             </button>
           </div>
         </div>
@@ -211,11 +205,11 @@ export function LobbyScreen({
             <div className="team-switch-content">
               <p>
                 <strong>{teamSwitchRequest.playerName}</strong> wants to switch from{' '}
-                <span style={{ color: getTeamColorHex(teamColors[teamSwitchRequest.fromTeamIndex] as 'blue' | 'green' | 'red') }}>
+                <span style={{ color: getClassicColorHex(teamColors[teamSwitchRequest.fromTeamIndex]) }}>
                   {teamNames[teamSwitchRequest.fromTeamIndex]}
                 </span>{' '}
                 to{' '}
-                <span style={{ color: getTeamColorHex(teamColors[teamSwitchRequest.toTeamIndex] as 'blue' | 'green' | 'red') }}>
+                <span style={{ color: getClassicColorHex(teamColors[teamSwitchRequest.toTeamIndex]) }}>
                   {teamNames[teamSwitchRequest.toTeamIndex]}
                 </span>
               </p>
@@ -240,75 +234,7 @@ export function LobbyScreen({
           </div>
         )}
 
-        {/* Teams Section */}
-        <div className="teams-section">
-          <div className="teams-header">
-            <h2>Teams</h2>
-            <span className="player-count">
-              {roomInfo.players.length} / {roomInfo.maxPlayers} players
-            </span>
-          </div>
-
-          <div className="teams-grid">
-            {Array.from(teams.entries()).map(([teamIndex, teamPlayers]) => (
-              <div key={teamIndex} className="team-card">
-                <div
-                  className="team-header"
-                  style={{
-                    backgroundColor: getTeamColorHex(teamColors[teamIndex] as 'blue' | 'green' | 'red'),
-                  }}
-                >
-                  <span className="team-name">{teamNames[teamIndex]}</span>
-                  <span className="team-letter">{getTeamLetter(teamColors[teamIndex] as 'blue' | 'green' | 'red')}</span>
-                </div>
-                <div className="team-players">
-                  {teamPlayers.map((player) => (
-                    <div
-                      key={player.id}
-                      className={`team-player ${!player.connected ? 'disconnected' : ''} ${player.ready ? 'ready' : ''}`}
-                    >
-                      <span className="player-name">
-                        {player.name}
-                        {player.id === roomInfo.hostId && <span className="host-badge">Host</span>}
-                        {player.id === playerId && <span className="me-badge">You</span>}
-                      </span>
-                      <span className={`ready-status ${player.ready ? 'is-ready' : ''}`}>
-                        {player.ready ? '✓ Ready' : 'Not Ready'}
-                      </span>
-                      {!player.connected && <span className="disconnected-badge">Offline</span>}
-                      {isHost && player.id !== playerId && (
-                        <button className="kick-button" onClick={() => onKickPlayer(player.id)} title="Kick player">
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {teamPlayers.length === 0 && (
-                    <div className="team-player empty">No players yet</div>
-                  )}
-                </div>
-                {/* Switch to this team button */}
-                {myPlayer && myPlayer.teamIndex !== teamIndex && (
-                  <button
-                    className="switch-team-btn"
-                    onClick={() => handleTeamSwitchRequest(teamIndex)}
-                  >
-                    {isHost ? 'Switch Here' : 'Request to Join'}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Empty slots */}
-          {roomInfo.players.length < roomInfo.maxPlayers && (
-            <div className="empty-slots">
-              Waiting for {roomInfo.maxPlayers - roomInfo.players.length} more player{roomInfo.maxPlayers - roomInfo.players.length > 1 ? 's' : ''}...
-            </div>
-          )}
-        </div>
-
-        {/* Game Info */}
+        {/* Game Info Dashboard */}
         <div className="game-info">
           <div className="info-item">
             <span className="info-label">Teams</span>
@@ -334,26 +260,97 @@ export function LobbyScreen({
           </div>
         </div>
 
+        {/* Teams Section */}
+        <div className="teams-section">
+          <div className="teams-header">
+            <h2>Game Rosters</h2>
+            <span className="player-count">
+              {roomInfo.players.length} / {roomInfo.maxPlayers}
+            </span>
+          </div>
+
+          <div className="teams-grid">
+            {Array.from(teams.entries()).map(([teamIndex, teamPlayers]) => (
+              <div key={teamIndex} className="team-card">
+                <div
+                  className="team-header"
+                  style={{
+                    backgroundColor: getClassicColorHex(teamColors[teamIndex]),
+                    borderBottomColor: getClassicColorHex(teamColors[teamIndex])
+                  }}
+                >
+                  <span className="team-name">{teamNames[teamIndex]}</span>
+                  <span className="team-letter" style={{ color: getClassicColorHex(teamColors[teamIndex]), background: 'white', borderColor: 'white' }}>
+                    {getTeamLetter(teamColors[teamIndex] as 'blue' | 'green' | 'red')}
+                  </span>
+                </div>
+                <div className="team-players">
+                  {teamPlayers.map((player) => (
+                    <div
+                      key={player.id}
+                      className={`team-player ${!player.connected ? 'disconnected' : ''} ${player.ready ? 'ready' : ''}`}
+                    >
+                      <span className="player-name">
+                        {player.name}
+                        {player.id === roomInfo.hostId && <span className="host-badge">HOST</span>}
+                        {player.id === playerId && <span className="me-badge">YOU</span>}
+                      </span>
+                      <span className={`ready-status ${player.ready ? 'is-ready' : ''}`}>
+                        {player.ready ? '\u2713 READY' : 'WAITING'}
+                      </span>
+                      {!player.connected && <span className="disconnected-badge">OFFLINE</span>}
+                      {isHost && player.id !== playerId && (
+                        <button className="kick-button" onClick={() => onKickPlayer(player.id)} title="Kick player">
+                          &#10005;
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {teamPlayers.length === 0 && (
+                    <div className="team-player empty">Open Slot</div>
+                  )}
+                </div>
+                {/* Switch to this team button */}
+                {myPlayer && myPlayer.teamIndex !== teamIndex && (
+                  <button
+                    className="switch-team-btn"
+                    onClick={() => handleTeamSwitchRequest(teamIndex)}
+                  >
+                    {isHost ? 'Switch Here' : 'Request to Join'}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Empty slots */}
+          {roomInfo.players.length < roomInfo.maxPlayers && (
+            <div className="empty-slots">
+              Waiting for {roomInfo.maxPlayers - roomInfo.players.length} more player{roomInfo.maxPlayers - roomInfo.players.length > 1 ? 's' : ''}...
+            </div>
+          )}
+        </div>
+
         {/* Game Settings (Host Only) */}
         {isHost && (
           <div className="settings-section">
-            <h3>Game Settings</h3>
+            <h3>House Rules</h3>
 
             {/* Quick Presets */}
             <div className="setting-group presets-group">
-              <label className="setting-label">Quick Presets</label>
+              <label className="setting-label">Standard Configurations</label>
               <div className="presets-options">
                 <button
                   className={`preset-btn ${roomInfo.turnTimeLimit === 0 && roomInfo.sequenceLength === 5 ? 'active' : ''}`}
                   onClick={handleClassicPreset}
                 >
-                  Classic
+                  Classic Sequence
                 </button>
                 <button
                   className={`preset-btn speed ${roomInfo.turnTimeLimit === 15 && roomInfo.sequenceLength === 4 ? 'active' : ''}`}
                   onClick={handleSpeedSequencePreset}
                 >
-                  Speed Sequence
+                  Speed Edition
                 </button>
               </div>
             </div>
@@ -379,7 +376,7 @@ export function LobbyScreen({
             </div>
 
             <div className="setting-group">
-              <label className="setting-label">Sequences to Win</label>
+              <label className="setting-label">Victory Condition</label>
               <div className="sequences-options">
                 {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
                   <button
@@ -440,8 +437,9 @@ export function LobbyScreen({
         <button
           className={`btn btn-lg w-full ${myPlayer?.ready ? 'btn-secondary' : 'btn-primary'}`}
           onClick={handleToggleReady}
+          style={myPlayer?.ready ? { background: '#27ae60', color: 'white', borderColor: '#219653' } : {}}
         >
-          {myPlayer?.ready ? 'Cancel Ready' : 'Ready Up!'}
+          {myPlayer?.ready ? '\u2713 READY TO PLAY' : 'READY UP!'}
         </button>
 
         {/* Start Button (Host only) */}
@@ -450,25 +448,25 @@ export function LobbyScreen({
             className="btn btn-primary btn-lg w-full start-button"
             onClick={handleStart}
             disabled={loading || !canStart || !allPlayersReady}
+            style={canStart && allPlayersReady ? { background: 'linear-gradient(to bottom, #f39c12, #d35400)' } : {}}
           >
             {loading
               ? 'Starting...'
               : !canStart
                 ? `Need ${findNearestValidCount(roomInfo.players.length)} players`
                 : !allPlayersReady
-                  ? 'Waiting for all players to be ready'
-                  : 'Start Game'}
+                  ? 'Waiting for players...'
+                  : 'BEGIN GAME'}
           </button>
         ) : (
           <div className="waiting-message">
             {allPlayersReady
-              ? 'Waiting for host to start the game...'
-              : 'Waiting for all players to be ready...'}
+              ? 'Waiting for host to deal...'
+              : 'Waiting for everyone to be ready...'}
           </div>
         )}
       </div>
 
-      {/* Game Mode Info Modal */}
       {gameModeInfo && (
         <GameModeModal
           modes={gameModeInfo.modes as GameModeType[]}

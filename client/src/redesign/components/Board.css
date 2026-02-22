@@ -1,0 +1,202 @@
+.board {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px;
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 20px 40px rgba(0,0,0,0.8);
+  width: 100vw;
+  max-width: 650px;
+  aspect-ratio: 1 / 1;
+  position: relative;
+}
+
+.board-row {
+  display: contents;
+}
+
+/* Base cell - Modern Dark Glass */
+.board-cell {
+  position: relative;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: default;
+  transition: all 0.2s var(--transition-smooth);
+  user-select: none;
+}
+
+/* Card face styling inside cells */
+.card-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  opacity: 0.8;
+}
+
+.card-face.red { color: var(--accent-danger); }
+.card-face.black { color: #ffffff; }
+
+.card-rank {
+  font-size: clamp(0.7rem, 2.5vw, 1.2rem);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.card-suit {
+  font-size: clamp(0.8rem, 3vw, 1.5rem);
+  line-height: 1;
+  margin-top: 2px;
+}
+
+/* Corner wild cell */
+.board-cell.corner {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.wild-corner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.wild-star {
+  font-size: clamp(1rem, 4vw, 2rem);
+  color: var(--accent-warning);
+}
+
+/* Interactive states */
+.board-cell.highlighted {
+  cursor: pointer;
+  background: rgba(99, 102, 241, 0.15);
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+  z-index: 1;
+}
+
+.highlight-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.board-cell.highlighted:hover .highlight-overlay {
+  opacity: 1;
+}
+
+.board-cell.highlighted:hover {
+  transform: scale(1.08);
+  background: rgba(99, 102, 241, 0.3);
+  z-index: 5;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.5), inset 0 0 0 1px var(--accent-primary);
+}
+
+/* Slick Modern Chips */
+.chip {
+  position: absolute;
+  top: 10%;
+  left: 10%;
+  width: 80%;
+  height: 80%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  box-shadow: 
+    0 4px 10px rgba(0,0,0,0.6),
+    inset 0 2px 4px rgba(255,255,255,0.4),
+    inset 0 -2px 4px rgba(0,0,0,0.4);
+  animation: chipDrop 0.4s var(--transition-spring);
+  /* Shiny rim */
+  border: 1px solid rgba(255,255,255,0.5);
+}
+
+@keyframes chipDrop {
+  0% { transform: scale(2) translateY(-20px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* Subtle inner ring */
+.chip::after {
+  content: '';
+  position: absolute;
+  width: 60%;
+  height: 60%;
+  border-radius: 50%;
+  border: 2px dashed rgba(255,255,255,0.3);
+  pointer-events: none;
+}
+
+.chip.locked {
+  filter: brightness(0.7);
+}
+
+.chip.locked::after {
+  border: 2px solid rgba(255,255,255,0.5);
+}
+
+.chip.preview {
+  opacity: 0.8;
+  transform: scale(1.1);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+  animation: none;
+}
+
+.chip.removing {
+  filter: grayscale(0.8) brightness(0.5);
+  transform: scale(0.9);
+}
+
+.remove-x {
+  position: absolute;
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  font-weight: 300;
+  color: white;
+  z-index: 3;
+}
+
+/* Text inside chips hidden for a cleaner modern look, 
+   the colors are enough and we hover for details if needed */
+.chip-rank, .chip-suit, .chip-team {
+  display: none;
+}
+
+/* Glowing Sequence Line */
+.sequence-glow {
+  position: absolute;
+  inset: -2px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 3;
+  animation: sequencePulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes sequencePulse {
+  0% { opacity: 0.6; filter: blur(2px); }
+  100% { opacity: 1; filter: blur(0px); }
+}
+
+@media (min-width: 768px) {
+  .board {
+    max-width: 750px;
+    padding: 6px;
+    gap: 4px;
+    border-radius: var(--border-radius-xl);
+  }
+  .board-cell {
+    border-radius: 6px;
+  }
+}
