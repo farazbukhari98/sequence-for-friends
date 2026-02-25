@@ -123,7 +123,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialRoomCode }: HomeSc
 
         <h2>Create Game</h2>
 
-        <div className="flex-col gap-lg mt-md">
+        <div className="flex flex-col gap-md mt-md">
           <div className="form-group">
             <label htmlFor="roomName">Room Name</label>
             <input
@@ -180,7 +180,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialRoomCode }: HomeSc
                   className={"sequences-btn " + (sequencesToWin === option.value ? 'active' : '')}
                   onClick={() => setSequencesToWin(option.value)}
                 >
-                  {option.label}
+                  {option.value}
                 </button>
               ))}
             </div>
@@ -232,7 +232,7 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialRoomCode }: HomeSc
 
         <h2>Join Game</h2>
 
-        <div className="flex-col gap-lg mt-md">
+        <div className="flex flex-col gap-lg mt-md">
           {initialRoomCode && (
             <div className="invite-banner p-md text-center">
               You've been invited to join a game!

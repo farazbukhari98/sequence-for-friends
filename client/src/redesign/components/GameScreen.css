@@ -40,6 +40,11 @@
   color: var(--accent-danger);
 }
 
+.menu-btn-placeholder {
+  width: 40px;
+  height: 40px;
+}
+
 /* Turn Indicator */
 .turn-indicator-wrapper {
   display: flex;
@@ -64,6 +69,49 @@
   color: var(--text-secondary);
   text-transform: none;
   letter-spacing: 0;
+}
+
+.skipping-turn {
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-style: italic;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Disconnected Players Banner */
+.disconnected-banner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: 4px var(--space-md);
+  background: rgba(239, 68, 68, 0.1);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+  z-index: 45;
+}
+
+.disconnected-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.disconnected-badge {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--accent-danger);
+  padding: 1px 6px;
+  border-radius: var(--border-radius-full);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 /* Score Display */

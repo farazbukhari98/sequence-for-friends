@@ -85,7 +85,8 @@
 }
 
 html, body {
-  height: 100dvh;
+  height: 100vh;      /* fallback for iOS < 16.5 */
+  height: 100dvh;     /* modern dynamic viewport */
   width: 100%;
   overflow: hidden;
   background-color: var(--bg-base);
@@ -107,7 +108,8 @@ body::before {
 
 #root {
   height: 100%;
-  max-height: 100dvh;
+  max-height: 100vh;   /* fallback for iOS < 16.5 */
+  max-height: 100dvh;  /* modern dynamic viewport */
   display: flex;
   flex-direction: column;
   position: relative;
@@ -280,9 +282,18 @@ input::placeholder {
 .w-full { width: 100%; }
 .text-center { text-align: center; }
 
+.mt-sm { margin-top: var(--space-sm); }
 .mt-md { margin-top: var(--space-md); }
 .mt-lg { margin-top: var(--space-lg); }
 .mb-md { margin-bottom: var(--space-md); }
+.p-md { padding: var(--space-md); }
+
+/* Form hints */
+.form-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
 
 /* Animations */
 @keyframes fadeIn {
@@ -296,3 +307,28 @@ input::placeholder {
 }
 
 .animate-fade-in { animation: fadeIn 0.4s var(--transition-smooth); }
+
+/* Mobile overrides */
+@media (max-width: 480px) {
+  :root {
+    --space-lg: 20px;
+    --space-xl: 28px;
+  }
+
+  .btn {
+    height: 42px;
+  }
+
+  .btn-lg {
+    height: 48px;
+    font-size: 1rem;
+  }
+
+  input[type="text"], input[type="number"], input[type="password"] {
+    height: 46px;
+  }
+
+  .modal-content {
+    padding: var(--space-lg);
+  }
+}

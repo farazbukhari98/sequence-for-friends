@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { useSocket } from './hooks/useSocket';
 import { HomeScreen } from './redesign/components/HomeScreen';
 import { LobbyScreen } from './redesign/components/LobbyScreen';
@@ -24,7 +26,7 @@ function getRoomCodeFromURL(): string | null {
 function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [playerId, setPlayerId] = useState<string | null>(null);
-  const [urlRoomCode] = useState<string | null>(getRoomCodeFromURL);
+  const [urlRoomCode, setUrlRoomCode] = useState<string | null>(getRoomCodeFromURL);
 
   const {
     connected,
@@ -82,6 +84,47 @@ function App() {
       });
     }
   }, [connected, reconnect, urlRoomCode]);
+
+  // Listen for deep links (Universal Links / App Links)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const listener = CapApp.addListener('appUrlOpen', (event) => {
+      try {
+        // Handle custom scheme: sequencegame://join/CODE
+        if (event.url.startsWith('sequencegame://')) {
+          const path = event.url.replace('sequencegame://', '');
+          const joinMatch = path.match(/^join\/([A-Za-z0-9]+)/);
+          if (joinMatch) {
+            const code = joinMatch[1].toUpperCase();
+            setUrlRoomCode(code);
+            setScreen('home');
+          }
+          return;
+        }
+        // Handle Universal Links: https://...
+        const url = new URL(event.url);
+        const joinMatch = url.pathname.match(/^\/join\/([A-Za-z0-9]+)/);
+        if (joinMatch) {
+          const code = joinMatch[1].toUpperCase();
+          setUrlRoomCode(code);
+          setScreen('home');
+          return;
+        }
+        const roomParam = url.searchParams.get('room') || url.searchParams.get('code');
+        if (roomParam) {
+          setUrlRoomCode(roomParam.toUpperCase());
+          setScreen('home');
+        }
+      } catch {
+        // Invalid URL, ignore
+      }
+    });
+
+    return () => {
+      listener.then(l => l.remove());
+    };
+  }, []);
 
   // Update screen based on game state
   useEffect(() => {

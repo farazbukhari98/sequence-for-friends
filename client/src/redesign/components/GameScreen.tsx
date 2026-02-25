@@ -204,6 +204,7 @@ export function GameScreen({
   }, []);
 
   const isRemovalPreview = selectedCard ? getJackType(selectedCard) === 'one-eyed' : false;
+  const isSeriesGame = roomInfo?.seriesState !== null && roomInfo?.seriesState !== undefined;
 
   useEffect(() => {
     if (showCutCards && cutCards) {
@@ -221,6 +222,11 @@ export function GameScreen({
       const currentCount = currentCounts[i] || 0;
 
       if (currentCount > prevCount) {
+        // Don't block the scoring team — they still need to draw a card
+        if (i === myPlayer?.teamIndex) {
+          continue;
+        }
+
         const teamColor = gameState.config.teamColors[i];
         const teamPlayers = gameState.players
           .filter(p => p.teamIndex === i)
@@ -237,7 +243,7 @@ export function GameScreen({
       }
     }
     prevSequenceCountRef.current = [...currentCounts];
-  }, [gameState.sequencesCompleted, gameState.config.teamColors, gameState.players]);
+  }, [gameState.sequencesCompleted, gameState.config.teamColors, gameState.players, myPlayer?.teamIndex]);
 
   useEffect(() => {
     if (sequenceCelebration) {
@@ -251,9 +257,13 @@ export function GameScreen({
       {/* Header */}
       <header className="game-header">
         <div className="game-header-left">
-          <button className="menu-btn" onClick={onLeave}>
-            &#9776;
-          </button>
+          {!isSeriesGame ? (
+            <button className="menu-btn" onClick={onLeave}>
+              &#9776;
+            </button>
+          ) : (
+            <div className="menu-btn-placeholder" />
+          )}
         </div>
 
         <div className="game-header-center">
@@ -265,8 +275,12 @@ export function GameScreen({
                 </span>
               ) : isMyTurn ? (
                 <span className="your-turn">YOUR TURN</span>
+              ) : currentPlayer && !currentPlayer.connected ? (
+                <span className="skipping-turn">Skipping {currentPlayer.name}...</span>
               ) : (
-                <span className="waiting-turn">Waiting for {currentPlayer?.name}</span>
+                <span className="waiting-turn">
+                  Waiting for {currentPlayer?.name}
+                </span>
               )}
             </div>
             {gameState.turnTimeLimit > 0 && gameState.winnerTeamIndex === null && (
@@ -288,6 +302,19 @@ export function GameScreen({
           />
         </div>
       </header>
+
+      {/* Disconnected Players Banner */}
+      {gameState.players.some(p => !p.connected) && gameState.winnerTeamIndex === null && (
+        <div className="disconnected-banner">
+          {gameState.players
+            .filter(p => !p.connected)
+            .map(p => (
+              <span key={p.id} className="disconnected-player">
+                {p.name} <span className="disconnected-badge">DISCONNECTED</span>
+              </span>
+            ))}
+        </div>
+      )}
 
       {/* Board Container */}
       <div className="board-container" ref={containerRef}>
@@ -349,7 +376,9 @@ export function GameScreen({
 
         {!isMyTurn && gameState.winnerTeamIndex === null && (
           <div className="step-hint waiting">
-            Opponent is thinking...
+            {currentPlayer && !currentPlayer.connected
+              ? `Skipping ${currentPlayer.name}...`
+              : 'Opponent is thinking...'}
           </div>
         )}
       </div>

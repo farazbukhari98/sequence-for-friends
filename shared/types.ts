@@ -134,14 +134,14 @@ export type GamePhase = 'lobby' | 'cutting' | 'playing' | 'finished';
 export type TurnTimeLimit = 0 | 15 | 20 | 30 | 45 | 60 | 90 | 120; // 0 = no limit, values in seconds
 
 export const TURN_TIME_OPTIONS: { value: TurnTimeLimit; label: string }[] = [
-  { value: 0, label: 'No Limit' },
-  { value: 15, label: '15s (Speed)' },
-  { value: 20, label: '20 seconds' },
-  { value: 30, label: '30 seconds' },
-  { value: 45, label: '45 seconds' },
-  { value: 60, label: '1 minute' },
-  { value: 90, label: '90 seconds' },
-  { value: 120, label: '2 minutes' },
+  { value: 0, label: 'None' },
+  { value: 15, label: '15s' },
+  { value: 20, label: '20s' },
+  { value: 30, label: '30s' },
+  { value: 45, label: '45s' },
+  { value: 60, label: '60s' },
+  { value: 90, label: '90s' },
+  { value: 120, label: '2min' },
 ];
 
 // ============================================

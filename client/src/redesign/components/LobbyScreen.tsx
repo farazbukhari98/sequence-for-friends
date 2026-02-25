@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
 import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, SequenceLength, SeriesLength, TeamSwitchRequest } from '../../../../shared/types';
 import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, SEQUENCE_LENGTH_OPTIONS, SERIES_LENGTH_OPTIONS } from '../../../../shared/types';
 import { GameModeModal } from '../../components/GameModeModal';
@@ -83,17 +85,29 @@ export function LobbyScreen({
   };
 
   const handleShare = async () => {
-    const shareData = {
-      title: 'Join my Sequence game!',
-      text: `Join my Sequence game "${roomInfo.name}"! Room code: ${roomInfo.code}`,
-      url: window.location.origin + window.location.pathname + "?room=" + roomInfo.code,
-    };
+    const shareUrl = `https://sequence-game-uo5u.onrender.com/join/${roomInfo.code}`;
+    const shareText = `Join my Sequence game "${roomInfo.name}"! Room code: ${roomInfo.code}`;
 
-    if (navigator.share) {
+    if (Capacitor.isNativePlatform()) {
       try {
-        await navigator.share(shareData);
+        await Share.share({
+          title: 'Join my Sequence game!',
+          text: shareText,
+          url: shareUrl,
+          dialogTitle: 'Share Game Invite',
+        });
       } catch {
-        // Ignored
+        handleCopyCode();
+      }
+    } else if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join my Sequence game!',
+          text: shareText,
+          url: shareUrl,
+        });
+      } catch {
+        handleCopyCode();
       }
     } else {
       handleCopyCode();
@@ -184,17 +198,15 @@ export function LobbyScreen({
 
       <div className="lobby-content">
         {/* Room Code */}
-        <div className="room-code-card">
-          <div className="room-code-label">Room Code</div>
-          <div className="room-code-value" onClick={handleCopyCode}>
-            {roomInfo.code}
-          </div>
+        <div className="room-code-card" onClick={handleCopyCode}>
+          <span className="room-code-label">ROOM CODE</span>
+          <span className="room-code-value">{roomInfo.code || '-----'}</span>
           <div className="room-code-actions">
-            <button className="btn btn-sm" onClick={handleCopyCode}>
-              {copied ? '\u2713 COPIED' : 'COPY CODE'}
+            <button className="room-code-btn room-code-copy" onClick={(e) => { e.stopPropagation(); handleCopyCode(); }}>
+              {copied ? '\u2713 Copied!' : 'Copy Code'}
             </button>
-            <button className="btn btn-sm" onClick={handleShare}>
-              SHARE
+            <button className="room-code-btn room-code-share" onClick={(e) => { e.stopPropagation(); handleShare(); }}>
+              Share
             </button>
           </div>
         </div>
@@ -432,7 +444,10 @@ export function LobbyScreen({
 
         {/* Error */}
         {error && <div className="form-error">{error}</div>}
+      </div>
 
+      {/* Fixed Bottom Action Bar - Always visible */}
+      <div className="lobby-action-bar">
         {/* Ready Button */}
         <button
           className={`btn btn-lg w-full ${myPlayer?.ready ? 'btn-secondary' : 'btn-primary'}`}

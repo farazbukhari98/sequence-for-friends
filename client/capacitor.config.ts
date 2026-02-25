@@ -4,6 +4,7 @@ const config: CapacitorConfig = {
   appId: 'com.farazbukhari.sequence',
   appName: 'Sequence for Friends',
   webDir: 'dist',
+  backgroundColor: '#050505',
   server: {
     androidScheme: 'https',
     iosScheme: 'https'
@@ -11,7 +12,8 @@ const config: CapacitorConfig = {
   ios: {
     contentInset: 'automatic',
     allowsLinkPreview: false,
-    scrollEnabled: true
+    scrollEnabled: true,
+    backgroundColor: '#050505'
   },
   plugins: {
     SplashScreen: {

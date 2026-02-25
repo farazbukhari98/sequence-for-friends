@@ -13,7 +13,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Safe area: push header below status bar */
   padding: var(--space-md) var(--space-lg);
+  padding-top: calc(env(safe-area-inset-top, 20px) + var(--space-sm));
   background: rgba(10, 10, 10, 0.7);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -62,51 +64,63 @@
 /* Room Code Card */
 .room-code-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-  border: 1px solid var(--border-light);
-  border-radius: var(--border-radius-lg);
-  padding: var(--space-lg) var(--space-xl);
-  position: relative;
-  overflow: hidden;
-}
-
-.room-code-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--accent-primary);
-}
-
-.room-code-info {
-  display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(168,85,247,0.10));
+  border: 1px solid rgba(99,102,241,0.4);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-md) var(--space-lg);
+  cursor: pointer;
 }
 
 .room-code-label {
-  font-size: 0.8rem;
+  display: block;
+  font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.15em;
   color: var(--text-secondary);
   font-weight: 600;
 }
 
 .room-code-value {
+  display: block;
   font-family: var(--font-mono);
-  font-size: 2.5rem;
+  font-size: 2.2rem;
   font-weight: 800;
-  color: white;
-  letter-spacing: 0.15em;
-  margin-top: 4px;
+  color: #ffffff;
+  letter-spacing: 0.2em;
+  line-height: 1.2;
 }
 
 .room-code-actions {
   display: flex;
-  gap: var(--space-sm);
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.room-code-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 16px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: var(--border-radius-full);
+  transition: all 0.2s ease;
+}
+
+.room-code-copy {
+  background: var(--accent-primary);
+  color: #ffffff;
+}
+
+.room-code-share {
+  background: rgba(255,255,255,0.1);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.2);
 }
 
 /* Game Info Dashboard */
@@ -334,13 +348,19 @@
   color: white;
 }
 
-/* Start / Ready Buttons Container */
-.action-container {
-  position: sticky;
-  bottom: 0;
-  padding: var(--space-md) 0;
-  background: linear-gradient(to top, var(--bg-base) 60%, transparent);
-  margin-top: auto;
+/* Fixed Bottom Action Bar - Always visible */
+.lobby-action-bar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-md));
+  background: var(--bg-base);
+  border-top: 1px solid var(--border-color);
+  max-width: 768px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .start-button {
@@ -445,13 +465,81 @@
 }
 
 @media (max-width: 600px) {
-  .room-code-card {
-    flex-direction: column;
-    text-align: center;
+  .game-info {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .lobby-content {
+    gap: var(--space-md);
+    padding: var(--space-md);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-md));
+  }
+
+  .lobby-header {
+    padding: var(--space-sm) var(--space-md);
+    padding-top: calc(env(safe-area-inset-top, 20px) + var(--space-sm));
+  }
+
+  .room-code-value {
+    font-size: 1.8rem;
+  }
+
+  .info-item {
+    padding: var(--space-sm);
+  }
+
+  .info-label {
+    font-size: 0.7rem;
+  }
+
+  .info-value {
+    font-size: 1rem;
+  }
+
+  .teams-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: var(--space-md);
   }
 
-  .game-info {
-    grid-template-columns: repeat(2, 1fr);
+  .teams-header {
+    margin-bottom: var(--space-sm);
+  }
+
+  .teams-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .settings-section {
+    padding: var(--space-md);
+  }
+
+  .settings-section h3 {
+    font-size: 1rem;
+    margin-bottom: var(--space-md);
+  }
+
+  .setting-group {
+    margin-bottom: var(--space-md);
+  }
+
+  .time-option-btn, .sequences-option-btn, .preset-btn, .game-mode-btn, .series-option-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  .setting-label {
+    font-size: 0.8rem;
+    margin-bottom: var(--space-xs);
+  }
+
+  .setting-hint {
+    font-size: 0.75rem;
+  }
+
+  .lobby-action-bar {
+    padding: var(--space-sm) var(--space-md);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-sm));
   }
 }

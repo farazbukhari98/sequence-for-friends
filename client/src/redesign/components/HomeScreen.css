@@ -3,8 +3,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Safe area: push content below status bar + aesthetic padding */
   padding: var(--space-lg);
+  padding-top: calc(env(safe-area-inset-top, 20px) + var(--space-lg));
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-lg));
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   min-height: 0;
 }
 
@@ -14,7 +18,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-  padding-top: 10vh;
+  padding-top: var(--space-md);
   padding-bottom: var(--space-xl);
 }
 
@@ -81,59 +85,70 @@
 
 /* Glassmorphism Form Container */
 .form-container {
+  position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius-lg);
-  padding: var(--space-xl);
+  padding: var(--space-lg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  overflow: hidden;
 }
 
 .form-container h2 {
-  font-size: 2rem;
-  margin-bottom: var(--space-lg);
+  font-size: 1.75rem;
+  margin-bottom: var(--space-md);
   color: white;
   text-align: center;
 }
 
-.back-button {
-  position: absolute;
-  top: var(--space-md);
-  left: var(--space-md);
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  font-weight: 500;
-  display: flex;
+/* Back button inside home forms: normal flow, scoped to form-container */
+.form-container .back-button {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--border-radius-full);
   background: rgba(255,255,255,0.05);
   border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
   transition: all 0.2s ease;
+  margin-bottom: var(--space-md);
 }
 
-.back-button:hover {
+.form-container .back-button:hover {
   background: rgba(255,255,255,0.1);
   color: white;
   border-color: rgba(255,255,255,0.1);
 }
 
 /* Grids for selection */
-.player-count-grid, .time-limit-grid, .sequences-to-win-grid {
+.player-count-grid, .time-limit-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
-  gap: var(--space-sm);
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.sequences-to-win-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
 }
 
 .player-count-btn, .time-limit-btn, .sequences-btn {
-  background: rgba(255,255,255,0.03);
+  background: rgba(255,255,255,0.05);
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  height: 48px;
+  border-radius: var(--border-radius-sm);
+  height: 44px;
   color: var(--text-secondary);
   font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: all 0.2s var(--transition-smooth);
 }
 
@@ -184,4 +199,49 @@
   margin-top: auto;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+/* Mobile overrides */
+@media (max-width: 480px) {
+  .home-content {
+    padding-top: var(--space-sm);
+    gap: var(--space-lg);
+  }
+
+  .logo-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
+  }
+
+  .logo-s {
+    font-size: 36px;
+  }
+
+  .logo-title {
+    font-size: 2.5rem;
+  }
+
+  .logo-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .form-container {
+    padding: var(--space-lg);
+  }
+
+  .form-container h2 {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-sm);
+  }
+
+  .player-count-btn, .time-limit-btn, .sequences-btn {
+    height: 38px;
+    font-size: 0.8rem;
+  }
+
+  .room-code-input {
+    font-size: 1.6rem !important;
+    height: 52px !important;
+  }
 }

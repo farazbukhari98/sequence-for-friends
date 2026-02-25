@@ -85,7 +85,7 @@ app.get('/.well-known/apple-app-site-association', (_req, res) => {
       apps: [],
       details: [
         {
-          appID: 'YBLLF949FK.com.chiplaneapp.ChipLane',
+          appID: '469Q8Z675Y.com.farazbukhari.sequence',
           paths: ['/join/*', '/invite/*'],
         },
       ],
@@ -93,12 +93,40 @@ app.get('/.well-known/apple-app-site-association', (_req, res) => {
   });
 });
 
-// Also support /join/:code route for Universal Links
-// This will redirect to the app or show the web app
+// /join/:code route for Universal Links and shared invite links
+// Tries to open the native app first via custom URL scheme, falls back to web
 app.get('/join/:code', (req, res) => {
-  const roomCode = req.params.code.toUpperCase().replace('-', '');
-  // For web users, redirect to the main app with the room code
-  res.redirect(`/?join=${roomCode}`);
+  const roomCode = req.params.code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  res.send(`<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join Sequence Game</title>
+<style>
+  body { background: #0a0a0a; color: #fff; font-family: -apple-system, system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; }
+  .container { padding: 24px; }
+  h1 { font-size: 1.5rem; margin-bottom: 8px; }
+  p { color: #888; margin-bottom: 24px; }
+  .btn { display: inline-block; background: #6366f1; color: #fff; padding: 14px 32px;
+    border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 1rem; }
+  .fallback { margin-top: 16px; font-size: 0.85rem; color: #666; }
+  .fallback a { color: #6366f1; }
+</style>
+</head><body>
+<div class="container">
+  <h1>Sequence for Friends</h1>
+  <p>You've been invited to join a game!</p>
+  <a class="btn" id="openApp" href="sequencegame://join/${roomCode}">Open in App</a>
+  <div class="fallback">
+    <p>Don't have the app? <a href="/?room=${roomCode}">Play on web</a></p>
+  </div>
+</div>
+<script>
+  // Try to open the app automatically
+  window.location.href = 'sequencegame://join/${roomCode}';
+</script>
+</body></html>`);
 });
 
 // Privacy Policy page (required for App Store)
