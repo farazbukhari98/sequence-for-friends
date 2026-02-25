@@ -13,6 +13,7 @@ import type {
   TeamSwitchRequest,
   SequenceLength,
   SeriesLength,
+  BotDifficulty,
 } from '../../../shared/types';
 
 type SequenceSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -41,10 +42,12 @@ interface UseSocketReturn {
   gameModeInfo: GameModeInfo | null;
   // Actions
   createRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit, sequencesToWin?: SequencesToWin) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
+  createBotGame: (playerName: string, difficulty: BotDifficulty) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   joinRoom: (roomCode: string, playerName: string, token?: string) => Promise<{ roomInfo: RoomInfo; playerId: string; token: string } | { error: string }>;
   reconnect: (roomCode: string, token: string) => Promise<{ roomInfo: RoomInfo; gameState?: ClientGameState; playerId: string } | { error: string }>;
   leaveRoom: () => void;
   kickPlayer: (playerId: string) => void;
+  addBot: (difficulty: BotDifficulty) => Promise<{ success: boolean; error?: string }>;
   startGame: () => Promise<{ success: boolean; error?: string }>;
   sendAction: (action: GameAction) => Promise<MoveResult>;
   updateRoomSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }) => Promise<{ success: boolean; error?: string }>;
@@ -209,6 +212,30 @@ export function useSocket(): UseSocketReturn {
     });
   }, []);
 
+  const createBotGame = useCallback(async (
+    playerName: string,
+    difficulty: BotDifficulty
+  ): Promise<{ roomCode: string; playerId: string; token: string } | { error: string }> => {
+    return new Promise((resolve) => {
+      if (!socketRef.current) {
+        resolve({ error: 'Not connected to server' });
+        return;
+      }
+
+      socketRef.current.emit('create-bot-game', { playerName, difficulty }, (response) => {
+        if (response.success && response.roomCode && response.playerId && response.token) {
+          resolve({
+            roomCode: response.roomCode,
+            playerId: response.playerId,
+            token: response.token,
+          });
+        } else {
+          resolve({ error: response.error || 'Failed to create bot game' });
+        }
+      });
+    });
+  }, []);
+
   const joinRoom = useCallback(async (
     roomCode: string,
     playerName: string,
@@ -276,6 +303,21 @@ export function useSocket(): UseSocketReturn {
     if (socketRef.current) {
       socketRef.current.emit('kick-player', playerId);
     }
+  }, []);
+
+  const addBot = useCallback(async (
+    difficulty: BotDifficulty
+  ): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!socketRef.current) {
+        resolve({ success: false, error: 'Not connected to server' });
+        return;
+      }
+
+      socketRef.current.emit('add-bot', { difficulty }, (response) => {
+        resolve(response);
+      });
+    });
   }, []);
 
   const startGame = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
@@ -424,10 +466,12 @@ export function useSocket(): UseSocketReturn {
     teamSwitchResponse,
     gameModeInfo,
     createRoom,
+    createBotGame,
     joinRoom,
     reconnect,
     leaveRoom,
     kickPlayer,
+    addBot,
     startGame,
     sendAction,
     updateRoomSettings,

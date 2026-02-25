@@ -10,5 +10,6 @@ export default defineConfig({
     alias: {
       '@shared': './shared',
     },
+    extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
   },
 });

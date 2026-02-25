@@ -6,7 +6,7 @@ import { HomeScreen } from './redesign/components/HomeScreen';
 import { LobbyScreen } from './redesign/components/LobbyScreen';
 import { GameScreen } from './redesign/components/GameScreen';
 import { Toast } from './components/Toast';
-import type { TurnTimeLimit, SequencesToWin } from '../../shared/types';
+import type { TurnTimeLimit, SequencesToWin, BotDifficulty } from '../../shared/types';
 
 type Screen = 'home' | 'lobby' | 'game';
 
@@ -39,10 +39,12 @@ function App() {
     teamSwitchResponse,
     gameModeInfo,
     createRoom,
+    createBotGame,
     joinRoom,
     reconnect,
     leaveRoom,
     kickPlayer,
+    addBot,
     startGame,
     sendAction,
     updateRoomSettings,
@@ -56,34 +58,12 @@ function App() {
     clearGameModeInfo,
   } = useSocket();
 
-  // Check for existing session on mount
+  // Always start fresh on app open — clear any stale session
   useEffect(() => {
-    const savedRoomCode = localStorage.getItem(STORAGE_KEYS.roomCode);
-    const savedToken = localStorage.getItem(STORAGE_KEYS.token);
-
-    if (savedRoomCode && savedToken && connected) {
-      // Try to reconnect
-      reconnect(savedRoomCode, savedToken).then((result) => {
-        if ('error' in result) {
-          // Clear invalid session
-          localStorage.removeItem(STORAGE_KEYS.roomCode);
-          localStorage.removeItem(STORAGE_KEYS.token);
-          localStorage.removeItem(STORAGE_KEYS.playerId);
-        } else {
-          setPlayerId(result.playerId);
-          // Clear URL param after successful reconnect
-          if (urlRoomCode) {
-            window.history.replaceState({}, '', window.location.pathname);
-          }
-          if (result.gameState) {
-            setScreen('game');
-          } else {
-            setScreen('lobby');
-          }
-        }
-      });
-    }
-  }, [connected, reconnect, urlRoomCode]);
+    localStorage.removeItem(STORAGE_KEYS.roomCode);
+    localStorage.removeItem(STORAGE_KEYS.token);
+    localStorage.removeItem(STORAGE_KEYS.playerId);
+  }, []);
 
   // Listen for deep links (Universal Links / App Links)
   useEffect(() => {
@@ -157,6 +137,17 @@ function App() {
     }
     saveSession(result.roomCode, result.token, result.playerId);
     setScreen('lobby');
+    return result;
+  };
+
+  // Handle creating a bot game
+  const handleCreateBotGame = async (playerName: string, difficulty: BotDifficulty) => {
+    const result = await createBotGame(playerName, difficulty);
+    if ('error' in result) {
+      return result;
+    }
+    saveSession(result.roomCode, result.token, result.playerId);
+    setScreen('game'); // Skip lobby, go directly to game
     return result;
   };
 
@@ -239,6 +230,7 @@ function App() {
       {screen === 'home' && (
         <HomeScreen
           onCreateRoom={handleCreateRoom}
+          onCreateBotGame={handleCreateBotGame}
           onJoinRoom={handleJoinRoom}
           initialRoomCode={urlRoomCode || undefined}
         />
@@ -253,6 +245,7 @@ function App() {
           gameModeInfo={gameModeInfo}
           onLeave={handleLeaveRoom}
           onKickPlayer={kickPlayer}
+          onAddBot={addBot}
           onStartGame={handleStartGame}
           onUpdateSettings={updateRoomSettings}
           onToggleReady={toggleReady}

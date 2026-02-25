@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
-import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, SequenceLength, SeriesLength, TeamSwitchRequest } from '../../../../shared/types';
+import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, SequenceLength, SeriesLength, TeamSwitchRequest, BotDifficulty } from '../../../../shared/types';
 import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, SEQUENCE_LENGTH_OPTIONS, SERIES_LENGTH_OPTIONS } from '../../../../shared/types';
 import { GameModeModal } from '../../components/GameModeModal';
 import type { GameModeType } from '../../components/GameModeModal';
@@ -16,6 +16,7 @@ interface LobbyScreenProps {
   gameModeInfo: GameModeInfo | null;
   onLeave: () => void;
   onKickPlayer: (playerId: string) => void;
+  onAddBot: (difficulty: BotDifficulty) => Promise<{ success: boolean; error?: string }>;
   onStartGame: () => Promise<{ success: boolean; error?: string }>;
   onUpdateSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }) => Promise<{ success: boolean; error?: string }>;
   onToggleReady: () => Promise<{ success: boolean; error?: string }>;
@@ -33,6 +34,7 @@ export function LobbyScreen({
   gameModeInfo,
   onLeave,
   onKickPlayer,
+  onAddBot,
   onStartGame,
   onUpdateSettings,
   onToggleReady,
@@ -116,6 +118,13 @@ export function LobbyScreen({
 
   const handleTeamSwitchRequest = async (toTeamIndex: number) => {
     const result = await onRequestTeamSwitch(toTeamIndex);
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
+  const handleAddBot = async (difficulty: BotDifficulty) => {
+    const result = await onAddBot(difficulty);
     if (result.error) {
       setError(result.error);
     }
@@ -306,13 +315,14 @@ export function LobbyScreen({
                         {player.name}
                         {player.id === roomInfo.hostId && <span className="host-badge">HOST</span>}
                         {player.id === playerId && <span className="me-badge">YOU</span>}
+                        {player.isBot && <span className="bot-badge">BOT</span>}
                       </span>
                       <span className={`ready-status ${player.ready ? 'is-ready' : ''}`}>
                         {player.ready ? '\u2713 READY' : 'WAITING'}
                       </span>
-                      {!player.connected && <span className="disconnected-badge">OFFLINE</span>}
+                      {!player.connected && !player.isBot && <span className="disconnected-badge">OFFLINE</span>}
                       {isHost && player.id !== playerId && (
-                        <button className="kick-button" onClick={() => onKickPlayer(player.id)} title="Kick player">
+                        <button className="kick-button" onClick={() => onKickPlayer(player.id)} title={player.isBot ? 'Remove bot' : 'Kick player'}>
                           &#10005;
                         </button>
                       )}
@@ -338,7 +348,15 @@ export function LobbyScreen({
           {/* Empty slots */}
           {roomInfo.players.length < roomInfo.maxPlayers && (
             <div className="empty-slots">
-              Waiting for {roomInfo.maxPlayers - roomInfo.players.length} more player{roomInfo.maxPlayers - roomInfo.players.length > 1 ? 's' : ''}...
+              <div>Waiting for {roomInfo.maxPlayers - roomInfo.players.length} more player{roomInfo.maxPlayers - roomInfo.players.length > 1 ? 's' : ''}...</div>
+              {isHost && (
+                <div className="add-bot-row">
+                  <span className="add-bot-label">Add Bot:</span>
+                  <button className="add-bot-btn add-bot-easy" onClick={() => handleAddBot('easy')}>Easy</button>
+                  <button className="add-bot-btn add-bot-medium" onClick={() => handleAddBot('medium')}>Medium</button>
+                  <button className="add-bot-btn add-bot-hard" onClick={() => handleAddBot('hard')}>Hard</button>
+                </div>
+              )}
             </div>
           )}
         </div>

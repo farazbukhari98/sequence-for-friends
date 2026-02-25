@@ -1,21 +1,23 @@
 import { useState, useEffect } from 'react';
-import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN } from '../../../../shared/types';
+import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN, BotDifficulty } from '../../../../shared/types';
 import './HomeScreen.css';
 
 interface HomeScreenProps {
   onCreateRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit, sequencesToWin: SequencesToWin) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
+  onCreateBotGame: (playerName: string, difficulty: BotDifficulty) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
   onJoinRoom: (roomCode: string, playerName: string) => Promise<{ roomInfo?: unknown; playerId?: string; token?: string; error?: string }>;
   initialRoomCode?: string;
 }
 
-export function HomeScreen({ onCreateRoom, onJoinRoom, initialRoomCode }: HomeScreenProps) {
-  const [mode, setMode] = useState<'home' | 'create' | 'join'>('home');
+export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialRoomCode }: HomeScreenProps) {
+  const [mode, setMode] = useState<'home' | 'create' | 'join' | 'bot'>('home');
   const [roomName, setRoomName] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(2);
   const [turnTimeLimit, setTurnTimeLimit] = useState<TurnTimeLimit>(0);
   const [sequencesToWin, setSequencesToWin] = useState<SequencesToWin>(DEFAULT_SEQUENCES_TO_WIN);
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +71,23 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialRoomCode }: HomeSc
     }
   };
 
+  const handleBotGame = async () => {
+    if (!playerName.trim()) {
+      setError('Please enter your name');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const result = await onCreateBotGame(playerName.trim(), botDifficulty);
+    setLoading(false);
+
+    if (result.error) {
+      setError(result.error);
+    }
+  };
+
   const handleBack = () => {
     setMode('home');
     setError(null);
@@ -99,6 +118,12 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialRoomCode }: HomeSc
           onClick={() => setMode('create')}
         >
           Create Game
+        </button>
+        <button
+          className="btn btn-bot btn-lg w-full"
+          onClick={() => setMode('bot')}
+        >
+          Play vs Bot
         </button>
         <button
           className="btn btn-secondary btn-lg w-full"
@@ -282,11 +307,67 @@ export function HomeScreen({ onCreateRoom, onJoinRoom, initialRoomCode }: HomeSc
     </div>
   );
 
+  const renderBotSetup = () => (
+    <div className="home-content animate-fade-in">
+      <div className="form-container bot-mode">
+        <button className="back-button" onClick={handleBack}>
+          &larr; Back
+        </button>
+
+        <h2>Play vs Bot</h2>
+
+        <div className="flex flex-col gap-lg mt-md">
+          <div className="form-group">
+            <label htmlFor="name">Your Name</label>
+            <input
+              id="name"
+              type="text"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Enter your name"
+              maxLength={20}
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Difficulty</label>
+            <div className="difficulty-grid">
+              {(['easy', 'medium', 'hard'] as BotDifficulty[]).map((diff) => (
+                <button
+                  key={diff}
+                  className={`difficulty-btn ${botDifficulty === diff ? 'active' : ''} difficulty-${diff}`}
+                  onClick={() => setBotDifficulty(diff)}
+                >
+                  <span className="difficulty-label">{diff.charAt(0).toUpperCase() + diff.slice(1)}</span>
+                  <span className="difficulty-desc">
+                    {diff === 'easy' ? 'Random moves' : diff === 'medium' ? 'Smart plays' : 'Expert strategy'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && <div className="form-error p-md">{error}</div>}
+
+          <button
+            className="btn btn-primary btn-lg w-full mt-md"
+            onClick={handleBotGame}
+            disabled={loading}
+          >
+            {loading ? 'Starting...' : 'Start Game'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="home-screen">
       {mode === 'home' && renderHome()}
       {mode === 'create' && renderCreate()}
       {mode === 'join' && renderJoin()}
+      {mode === 'bot' && renderBotSetup()}
     </div>
   );
 }

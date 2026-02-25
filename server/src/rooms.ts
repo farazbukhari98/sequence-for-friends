@@ -13,11 +13,13 @@ import {
   SequenceLength,
   SeriesLength,
   SeriesState,
+  BotDifficulty,
   DEFAULT_SEQUENCES_TO_WIN,
   DEFAULT_SEQUENCE_LENGTH,
   DEFAULT_SERIES_LENGTH,
 } from '../../shared/types.js';
 import { createGameConfig, initializeGame, assignTeams } from './gameState.js';
+import { createBotPlayer, generateBotName } from './bot.js';
 
 // In-memory room storage
 const rooms = new Map<string, Room>();
@@ -89,6 +91,7 @@ export function toPublicPlayer(player: Player): PublicPlayer {
       ? player.discardPile[player.discardPile.length - 1]
       : null,
     discardCount: player.discardPile.length,
+    isBot: player.isBot || undefined,
   };
 }
 
@@ -531,6 +534,48 @@ export function getRoomByToken(token: string): { room: Room; playerId: string } 
 }
 
 /**
+ * Add a bot to a room
+ */
+export function addBotToRoom(roomCode: string, difficulty: BotDifficulty): Player | { error: string } {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+
+  if (room.players.length >= room.maxPlayers) {
+    return { error: 'Room is full' };
+  }
+
+  const existingNames = room.players.map(p => p.name);
+  const botName = generateBotName(existingNames);
+  const bot = createBotPlayer(botName, difficulty);
+
+  room.players.push(bot);
+  assignTeams(room.players, room.teamCount);
+  room.lastActivityAt = Date.now();
+
+  return bot;
+}
+
+/**
+ * Remove a bot from a room
+ */
+export function removeBotFromRoom(roomCode: string, botPlayerId: string): Room | { error: string } {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+
+  const playerIndex = room.players.findIndex(p => p.id === botPlayerId);
+  if (playerIndex === -1) return { error: 'Player not found' };
+
+  const player = room.players[playerIndex];
+  if (!player.isBot) return { error: 'Player is not a bot' };
+
+  room.players.splice(playerIndex, 1);
+  assignTeams(room.players, room.teamCount);
+  room.lastActivityAt = Date.now();
+
+  return room;
+}
+
+/**
  * Mark player as disconnected
  */
 export function disconnectPlayer(roomCode: string, playerId: string): Room | null {
@@ -538,7 +583,7 @@ export function disconnectPlayer(roomCode: string, playerId: string): Room | nul
   if (!room) return null;
 
   const player = room.players.find(p => p.id === playerId);
-  if (player) {
+  if (player && !player.isBot) {
     player.connected = false;
   }
 

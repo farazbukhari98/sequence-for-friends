@@ -72,6 +72,14 @@ export function findCardPositions(card: CardCode): [number, number][] {
 }
 
 // ============================================
+// BOT TYPES
+// ============================================
+
+export type BotDifficulty = 'easy' | 'medium' | 'hard';
+
+// Bot names are defined in server/src/bot.ts to avoid stale compiled JS issues
+
+// ============================================
 // TEAM & PLAYER TYPES
 // ============================================
 
@@ -91,6 +99,8 @@ export interface Player {
   ready: boolean; // Ready to start the game
   hand: CardCode[]; // Only visible to this player on client
   discardPile: CardCode[]; // Top card visible to all
+  isBot?: boolean;
+  botDifficulty?: BotDifficulty;
 }
 
 // Public player info (what others can see)
@@ -105,6 +115,7 @@ export interface PublicPlayer {
   handCount: number;
   topDiscard: CardCode | null;
   discardCount: number;
+  isBot?: boolean;
 }
 
 // ============================================
@@ -418,6 +429,9 @@ export interface QuickMessageData {
 
 // Client -> Server events
 export interface ClientToServerEvents {
+  'create-bot-game': (data: { playerName: string; difficulty: BotDifficulty }, callback: (response: CreateRoomResponse) => void) => void;
+  'add-bot': (data: { difficulty: BotDifficulty }, callback: (response: { success: boolean; error?: string }) => void) => void;
+  'remove-bot': (data: { botPlayerId: string }, callback: (response: { success: boolean; error?: string }) => void) => void;
   'create-room': (data: { roomName: string; playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }, callback: (response: CreateRoomResponse) => void) => void;
   'join-room': (data: { roomCode: string; playerName: string; token?: string }, callback: (response: JoinRoomResponse) => void) => void;
   'leave-room': () => void;

@@ -240,7 +240,7 @@
   gap: 8px;
 }
 
-.host-badge, .me-badge {
+.host-badge, .me-badge, .bot-badge {
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -251,6 +251,7 @@
 
 .host-badge { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); }
 .me-badge { background: rgba(255, 255, 255, 0.1); color: white; }
+.bot-badge { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
 
 .ready-status {
   font-size: 0.8rem;
@@ -418,6 +419,57 @@
   color: var(--text-muted);
   padding: var(--space-md);
   font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Add Bot */
+.add-bot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.add-bot-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.add-bot-btn {
+  padding: 5px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: var(--border-radius-full);
+  border: 1px solid var(--border-light);
+  background: rgba(255,255,255,0.05);
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.add-bot-btn:hover {
+  transform: translateY(-1px);
+}
+
+.add-bot-easy:hover {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.add-bot-medium:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.add-bot-hard:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  color: #ef4444;
 }
 
 /* Disconnected Badge */

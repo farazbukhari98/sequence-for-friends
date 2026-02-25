@@ -781,22 +781,11 @@ function WinnerModal({
           )}
 
           {isSeries && !isSeriesOver && (
-            <>
-              <div className="series-next-countdown">
-                {loading
-                  ? 'Starting next game...'
-                  : `Next game in ${countdown}...`}
-              </div>
-              {isHost && (
-                <button
-                  className="btn btn-secondary winner-btn-secondary"
-                  onClick={handleEndSeries}
-                  disabled={loading}
-                >
-                  End Series
-                </button>
-              )}
-            </>
+            <div className="series-next-countdown">
+              {loading
+                ? 'Starting next game...'
+                : `Next game in ${countdown}...`}
+            </div>
           )}
 
           {isSeries && isSeriesOver && (

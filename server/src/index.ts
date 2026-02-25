@@ -11,6 +11,7 @@ import type {
   TeamSwitchRequest,
   EmoteType,
   QuickMessageType,
+  BotDifficulty,
 } from '../../shared/types.js';
 
 import {
@@ -33,9 +34,12 @@ import {
   updateRoomActivity,
   continueSeries,
   endSeries,
+  addBotToRoom,
+  removeBotFromRoom,
 } from './rooms.js';
 
 import { applyMove } from './rules/engine.js';
+import { decideBotAction, getBotDelay } from './bot.js';
 
 const __filename = fileURLToPath(import.meta.url);
 
@@ -192,6 +196,9 @@ const roomTimers = new Map<string, NodeJS.Timeout>();
 // Track pending team switch requests per room
 const pendingTeamSwitches = new Map<string, Map<string, TeamSwitchRequest>>();
 
+// Track bot turn timers per room
+const botTurnTimers = new Map<string, NodeJS.Timeout>();
+
 /**
  * Clear any existing timer for a room
  */
@@ -264,7 +271,153 @@ function handleTurnTimeout(roomCode: string): void {
   // Start timer for next player
   startTurnTimer(roomCode);
 
+  // Schedule bot turn if next player is a bot
+  scheduleBotTurnIfNeeded(roomCode);
+
   console.log(`Turn timeout for ${playerName} in room ${roomCode}`);
+}
+
+/**
+ * Clear bot turn timer for a room
+ */
+function clearBotTurnTimer(roomCode: string): void {
+  const timer = botTurnTimers.get(roomCode);
+  if (timer) {
+    clearTimeout(timer);
+    botTurnTimers.delete(roomCode);
+  }
+}
+
+/**
+ * Schedule bot turn if the current player is a bot
+ */
+function scheduleBotTurnIfNeeded(roomCode: string): void {
+  const room = getRoom(roomCode);
+  if (!room || !room.gameState || room.gameState.phase !== 'playing') return;
+
+  const currentPlayer = room.gameState.players[room.gameState.currentPlayerIndex];
+  if (!currentPlayer.isBot) return;
+
+  const difficulty = currentPlayer.botDifficulty || 'easy';
+  const delay = getBotDelay(difficulty);
+
+  // Clear any existing bot timer
+  clearBotTurnTimer(roomCode);
+
+  const timer = setTimeout(() => {
+    executeBotTurn(roomCode);
+  }, delay);
+
+  botTurnTimers.set(roomCode, timer);
+}
+
+/**
+ * Execute a bot's turn
+ */
+function executeBotTurn(roomCode: string): void {
+  const room = getRoom(roomCode);
+  if (!room || !room.gameState || room.gameState.phase !== 'playing') return;
+
+  const gameState = room.gameState;
+  const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+  if (!currentPlayer.isBot) return;
+
+  const difficulty = currentPlayer.botDifficulty || 'easy';
+
+  // Step 1: Handle dead cards
+  const action = decideBotAction(gameState, currentPlayer, difficulty);
+
+  if (action.type === 'replace-dead') {
+    applyMove(gameState, currentPlayer.id, action);
+    // After replacing dead card, decide the play action
+    broadcastGameStateToHumans(room);
+    // Schedule next action after a short delay
+    const nextTimer = setTimeout(() => executeBotTurn(roomCode), 400);
+    botTurnTimers.set(roomCode, nextTimer);
+    return;
+  }
+
+  if (action.type === 'draw') {
+    // Bot needs to draw (pendingDraw is true)
+    const previousPlayerIndex = gameState.currentPlayerIndex;
+    const drawResult = applyMove(gameState, currentPlayer.id, action);
+
+    if (drawResult.success) {
+      const turnChanged = gameState.currentPlayerIndex !== previousPlayerIndex;
+      if (turnChanged && !drawResult.gameOver) {
+        gameState.turnStartedAt = gameState.turnTimeLimit > 0 ? Date.now() : null;
+        startTurnTimer(roomCode);
+      }
+
+      broadcastGameStateToHumans(room);
+
+      if (drawResult.gameOver && drawResult.winnerTeamIndex !== undefined) {
+        clearTurnTimer(roomCode);
+        clearBotTurnTimer(roomCode);
+        io.to(roomCode).emit('game-over', drawResult.winnerTeamIndex, drawResult.stalemate);
+      } else {
+        scheduleBotTurnIfNeeded(roomCode);
+      }
+    }
+    return;
+  }
+
+  // Step 2: Play a card
+  const previousPlayerIndex = gameState.currentPlayerIndex;
+  const playResult = applyMove(gameState, currentPlayer.id, action);
+
+  if (playResult.success) {
+    broadcastGameStateToHumans(room);
+
+    if (playResult.gameOver && playResult.winnerTeamIndex !== undefined) {
+      clearTurnTimer(roomCode);
+      clearBotTurnTimer(roomCode);
+      io.to(roomCode).emit('game-over', playResult.winnerTeamIndex, playResult.stalemate);
+      return;
+    }
+
+    // Step 3: Draw card after a short delay
+    const drawTimer = setTimeout(() => {
+      if (!room.gameState || room.gameState.phase !== 'playing') return;
+
+      const prevIdx = room.gameState.currentPlayerIndex;
+      const drawResult = applyMove(room.gameState, currentPlayer.id, { type: 'draw' });
+
+      if (drawResult.success) {
+        const turnChanged = room.gameState.currentPlayerIndex !== prevIdx;
+        if (turnChanged && !drawResult.gameOver) {
+          room.gameState.turnStartedAt = room.gameState.turnTimeLimit > 0 ? Date.now() : null;
+          startTurnTimer(roomCode);
+        }
+
+        broadcastGameStateToHumans(room);
+
+        if (drawResult.gameOver && drawResult.winnerTeamIndex !== undefined) {
+          clearTurnTimer(roomCode);
+          clearBotTurnTimer(roomCode);
+          io.to(roomCode).emit('game-over', drawResult.winnerTeamIndex, drawResult.stalemate);
+        } else {
+          scheduleBotTurnIfNeeded(roomCode);
+        }
+      }
+    }, 400);
+
+    botTurnTimers.set(roomCode, drawTimer);
+  }
+}
+
+/**
+ * Broadcast game state to all human players in a room
+ */
+function broadcastGameStateToHumans(room: { code: string; gameState: import('../../shared/types.js').GameState | null; players: import('../../shared/types.js').Player[] }): void {
+  if (!room.gameState) return;
+
+  for (const player of room.players) {
+    const playerSocket = findSocketByPlayerId(player.id);
+    if (playerSocket) {
+      playerSocket.emit('game-state-updated', toClientGameState(room.gameState, player.id));
+    }
+  }
 }
 
 io.on('connection', (socket) => {
@@ -308,6 +461,122 @@ io.on('connection', (socket) => {
         error: error instanceof Error ? error.message : 'Failed to create room',
       });
     }
+  });
+
+  // Create a bot game (solo play vs AI)
+  socket.on('create-bot-game', (data, callback) => {
+    try {
+      // Create a 2-player room
+      const { room, player } = createRoom(
+        `${data.playerName} vs Bot`,
+        data.playerName,
+        2,   // maxPlayers
+        2,   // teamCount
+        0,   // no turn time limit
+      );
+
+      // Add a bot
+      const botResult = addBotToRoom(room.code, data.difficulty);
+      if ('error' in botResult) {
+        callback({ success: false, error: botResult.error });
+        return;
+      }
+
+      // Join socket to room
+      socket.join(room.code);
+      socketToPlayer.set(socket.id, { roomCode: room.code, playerId: player.id });
+
+      // Auto-start the game
+      const gameResult = startGame(room.code, player.id);
+      if ('error' in gameResult) {
+        callback({ success: false, error: gameResult.error });
+        return;
+      }
+
+      callback({
+        success: true,
+        roomCode: room.code,
+        playerId: player.id,
+        token: player.token,
+      });
+
+      // Send game state to human player
+      const updatedRoom = getRoom(room.code);
+      if (updatedRoom && updatedRoom.gameState) {
+        socket.emit('game-started', toClientGameState(updatedRoom.gameState, player.id));
+
+        // Start turn timer if enabled
+        startTurnTimer(room.code);
+
+        // Schedule bot turn if bot goes first
+        scheduleBotTurnIfNeeded(room.code);
+      }
+
+      console.log(`Bot game created: ${player.name} vs ${botResult.name} (${data.difficulty}) in room ${room.code}`);
+    } catch (error) {
+      callback({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create bot game',
+      });
+    }
+  });
+
+  // Add a bot to lobby
+  socket.on('add-bot', (data, callback) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) {
+      callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+
+    const room = getRoom(playerInfo.roomCode);
+    if (!room) {
+      callback({ success: false, error: 'Room not found' });
+      return;
+    }
+
+    if (room.hostId !== playerInfo.playerId) {
+      callback({ success: false, error: 'Only the host can add bots' });
+      return;
+    }
+
+    const result = addBotToRoom(playerInfo.roomCode, data.difficulty);
+    if ('error' in result) {
+      callback({ success: false, error: result.error });
+      return;
+    }
+
+    callback({ success: true });
+    io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(room));
+  });
+
+  // Remove a bot from lobby
+  socket.on('remove-bot', (data, callback) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) {
+      callback({ success: false, error: 'Not in a room' });
+      return;
+    }
+
+    const room = getRoom(playerInfo.roomCode);
+    if (!room) {
+      callback({ success: false, error: 'Room not found' });
+      return;
+    }
+
+    if (room.hostId !== playerInfo.playerId) {
+      callback({ success: false, error: 'Only the host can remove bots' });
+      return;
+    }
+
+    const result = removeBotFromRoom(playerInfo.roomCode, data.botPlayerId);
+    if ('error' in result) {
+      callback({ success: false, error: result.error });
+      return;
+    }
+
+    callback({ success: true });
+    io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(result));
   });
 
   // Join an existing room
@@ -403,6 +672,7 @@ io.on('connection', (socket) => {
     const playerInfo = socketToPlayer.get(socket.id);
     if (!playerInfo) return;
 
+    clearBotTurnTimer(playerInfo.roomCode);
     const room = leaveRoom(playerInfo.roomCode, playerInfo.playerId);
     socket.leave(playerInfo.roomCode);
     socketToPlayer.delete(socket.id);
@@ -665,6 +935,9 @@ io.on('connection', (socket) => {
 
       // Start turn timer if enabled
       startTurnTimer(playerInfo.roomCode);
+
+      // Schedule bot turn if first player is a bot
+      scheduleBotTurnIfNeeded(playerInfo.roomCode);
     }
 
     console.log(`Game started in room ${playerInfo.roomCode}`);
@@ -715,7 +988,11 @@ io.on('connection', (socket) => {
       if (result.gameOver && result.winnerTeamIndex !== undefined) {
         // Clear timer on game over
         clearTurnTimer(playerInfo.roomCode);
+        clearBotTurnTimer(playerInfo.roomCode);
         io.to(playerInfo.roomCode).emit('game-over', result.winnerTeamIndex, result.stalemate);
+      } else {
+        // Schedule bot turn if next player is a bot
+        scheduleBotTurnIfNeeded(playerInfo.roomCode);
       }
     }
   });
@@ -761,6 +1038,9 @@ io.on('connection', (socket) => {
     if (result.turnTimeLimit > 0) {
       startTurnTimer(playerInfo.roomCode);
     }
+
+    // Schedule bot turn if first player is a bot
+    scheduleBotTurnIfNeeded(playerInfo.roomCode);
   });
 
   // End series early - return to lobby
@@ -780,8 +1060,9 @@ io.on('connection', (socket) => {
 
     callback({ success: true });
 
-    // Clear any active timer
+    // Clear any active timers
     clearTurnTimer(playerInfo.roomCode);
+    clearBotTurnTimer(playerInfo.roomCode);
 
     // Send updated room info to all players
     io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(result));
