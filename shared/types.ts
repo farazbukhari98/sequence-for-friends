@@ -467,6 +467,7 @@ export interface ServerToClientEvents {
   'game-mode-changed': (data: { modes: string[]; changedBy: string; settings: { sequenceLength: number; turnTimeLimit: number; seriesLength: number } }) => void;
   'emote-received': (data: EmoteData) => void;
   'quick-message-received': (data: QuickMessageData) => void;
+  'room-closed': (reason: string) => void;
 }
 
 // Response types

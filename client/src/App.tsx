@@ -38,6 +38,7 @@ function App() {
     teamSwitchRequest,
     teamSwitchResponse,
     gameModeInfo,
+    roomClosed,
     createRoom,
     createBotGame,
     joinRoom,
@@ -56,6 +57,7 @@ function App() {
     clearError,
     clearTeamSwitchRequest,
     clearGameModeInfo,
+    clearRoomClosed,
   } = useSocket();
 
   // Always start fresh on app open — clear any stale session
@@ -112,6 +114,15 @@ function App() {
       setScreen('game');
     }
   }, [gameState]);
+
+  // Handle room closed (host left or ended game)
+  useEffect(() => {
+    if (roomClosed) {
+      clearSession();
+      setScreen('home');
+      clearRoomClosed();
+    }
+  }, [roomClosed, clearRoomClosed]);
 
   // Save session info
   const saveSession = (roomCode: string, token: string, pid: string) => {

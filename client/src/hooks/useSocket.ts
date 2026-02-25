@@ -40,6 +40,7 @@ interface UseSocketReturn {
   teamSwitchRequest: TeamSwitchRequest | null;
   teamSwitchResponse: { playerId: string; approved: boolean; playerName: string } | null;
   gameModeInfo: GameModeInfo | null;
+  roomClosed: string | null;
   // Actions
   createRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit, sequencesToWin?: SequencesToWin) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   createBotGame: (playerName: string, difficulty: BotDifficulty) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
@@ -61,6 +62,7 @@ interface UseSocketReturn {
   clearTeamSwitchRequest: () => void;
   clearTeamSwitchResponse: () => void;
   clearGameModeInfo: () => void;
+  clearRoomClosed: () => void;
 }
 
 const PRODUCTION_URL = 'https://sequence-game-uo5u.onrender.com';
@@ -94,6 +96,7 @@ export function useSocket(): UseSocketReturn {
   const [teamSwitchRequest, setTeamSwitchRequest] = useState<TeamSwitchRequest | null>(null);
   const [teamSwitchResponse, setTeamSwitchResponse] = useState<{ playerId: string; approved: boolean; playerName: string } | null>(null);
   const [gameModeInfo, setGameModeInfo] = useState<GameModeInfo | null>(null);
+  const [roomClosed, setRoomClosed] = useState<string | null>(null);
 
   // Initialize socket connection
   useEffect(() => {
@@ -177,6 +180,13 @@ export function useSocket(): UseSocketReturn {
 
     socket.on('game-mode-changed', (data) => {
       setGameModeInfo(data);
+    });
+
+    socket.on('room-closed', (reason) => {
+      setRoomClosed(reason);
+      setRoomInfo(null);
+      setGameState(null);
+      setCutCards(null);
     });
 
     return () => {
@@ -454,6 +464,10 @@ export function useSocket(): UseSocketReturn {
     setGameModeInfo(null);
   }, []);
 
+  const clearRoomClosed = useCallback(() => {
+    setRoomClosed(null);
+  }, []);
+
   return {
     socket: socketRef.current,
     connected,
@@ -465,6 +479,7 @@ export function useSocket(): UseSocketReturn {
     teamSwitchRequest,
     teamSwitchResponse,
     gameModeInfo,
+    roomClosed,
     createRoom,
     createBotGame,
     joinRoom,
@@ -485,5 +500,6 @@ export function useSocket(): UseSocketReturn {
     clearTeamSwitchRequest,
     clearTeamSwitchResponse,
     clearGameModeInfo,
+    clearRoomClosed,
   };
 }

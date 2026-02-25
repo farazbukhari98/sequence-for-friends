@@ -36,6 +36,7 @@ import {
   endSeries,
   addBotToRoom,
   removeBotFromRoom,
+  deleteRoom,
 } from './rooms.js';
 
 import { applyMove } from './rules/engine.js';
@@ -268,11 +269,20 @@ function handleTurnTimeout(roomCode: string): void {
     }
   }
 
-  // Start timer for next player
-  startTurnTimer(roomCode);
+  // Check if next player is disconnected — auto-skip after 3 seconds
+  const nextPlayer = gameState.players[gameState.currentPlayerIndex];
+  if (!nextPlayer.connected && !nextPlayer.isBot) {
+    const skipTimer = setTimeout(() => {
+      handleTurnTimeout(roomCode);
+    }, 3000);
+    roomTimers.set(roomCode, skipTimer);
+  } else {
+    // Start timer for next player
+    startTurnTimer(roomCode);
 
-  // Schedule bot turn if next player is a bot
-  scheduleBotTurnIfNeeded(roomCode);
+    // Schedule bot turn if next player is a bot
+    scheduleBotTurnIfNeeded(roomCode);
+  }
 
   console.log(`Turn timeout for ${playerName} in room ${roomCode}`);
 }
@@ -672,13 +682,39 @@ io.on('connection', (socket) => {
     const playerInfo = socketToPlayer.get(socket.id);
     if (!playerInfo) return;
 
+    const room = getRoom(playerInfo.roomCode);
+    const isHost = room?.hostId === playerInfo.playerId;
+    const isInGame = room?.phase === 'in-game';
+
+    // If host leaves during a game, close the room for everyone
+    if (isHost && isInGame && room) {
+      clearTurnTimer(playerInfo.roomCode);
+      clearBotTurnTimer(playerInfo.roomCode);
+
+      // Notify all players the room is closed
+      io.to(playerInfo.roomCode).emit('room-closed', 'Host ended the game');
+
+      // Clean up all player socket mappings for this room
+      for (const [sid, info] of socketToPlayer) {
+        if (info.roomCode === playerInfo.roomCode) {
+          const s = io.sockets.sockets.get(sid);
+          if (s) s.leave(playerInfo.roomCode);
+          socketToPlayer.delete(sid);
+        }
+      }
+
+      // Delete the room
+      deleteRoom(playerInfo.roomCode);
+      return;
+    }
+
     clearBotTurnTimer(playerInfo.roomCode);
-    const room = leaveRoom(playerInfo.roomCode, playerInfo.playerId);
+    const updatedRoom = leaveRoom(playerInfo.roomCode, playerInfo.playerId);
     socket.leave(playerInfo.roomCode);
     socketToPlayer.delete(socket.id);
 
-    if (room) {
-      io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(room));
+    if (updatedRoom) {
+      io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(updatedRoom));
     }
   });
 
@@ -1072,12 +1108,50 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const playerInfo = socketToPlayer.get(socket.id);
     if (playerInfo) {
-      const room = disconnectPlayer(playerInfo.roomCode, playerInfo.playerId);
+      const room = getRoom(playerInfo.roomCode);
+      const isHost = room?.hostId === playerInfo.playerId;
+      const isInGame = room?.phase === 'in-game';
+
+      // If host disconnects during a game, close the room for everyone
+      if (isHost && isInGame && room) {
+        clearTurnTimer(playerInfo.roomCode);
+        clearBotTurnTimer(playerInfo.roomCode);
+
+        io.to(playerInfo.roomCode).emit('room-closed', 'Host left the game');
+
+        // Clean up all socket mappings for this room
+        for (const [sid, info] of socketToPlayer) {
+          if (info.roomCode === playerInfo.roomCode) {
+            const s = io.sockets.sockets.get(sid);
+            if (s) s.leave(playerInfo.roomCode);
+            socketToPlayer.delete(sid);
+          }
+        }
+
+        deleteRoom(playerInfo.roomCode);
+        console.log(`Host disconnected, room ${playerInfo.roomCode} closed`);
+        return;
+      }
+
+      const updatedRoom = disconnectPlayer(playerInfo.roomCode, playerInfo.playerId);
       socketToPlayer.delete(socket.id);
 
-      if (room) {
+      if (updatedRoom) {
         io.to(playerInfo.roomCode).emit('player-disconnected', playerInfo.playerId);
-        io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(room));
+        io.to(playerInfo.roomCode).emit('room-updated', toRoomInfo(updatedRoom));
+
+        // If it's this player's turn during a game, auto-skip after 3 seconds
+        if (isInGame && updatedRoom.gameState && updatedRoom.gameState.phase === 'playing') {
+          const currentPlayer = updatedRoom.gameState.players[updatedRoom.gameState.currentPlayerIndex];
+          if (currentPlayer.id === playerInfo.playerId) {
+            // Clear any existing turn timer and skip after 3 seconds
+            clearTurnTimer(playerInfo.roomCode);
+            const skipTimer = setTimeout(() => {
+              handleTurnTimeout(playerInfo.roomCode);
+            }, 3000);
+            roomTimers.set(playerInfo.roomCode, skipTimer);
+          }
+        }
       }
     }
     console.log('Client disconnected:', socket.id);

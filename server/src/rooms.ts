@@ -674,6 +674,19 @@ export function updateRoomActivity(roomCode: string): void {
 }
 
 /**
+ * Delete a room entirely, cleaning up all player tokens
+ */
+export function deleteRoom(roomCode: string): void {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+
+  for (const player of room.players) {
+    playerTokens.delete(player.token);
+  }
+  rooms.delete(roomCode);
+}
+
+/**
  * Clean up old rooms (call periodically)
  * Removes rooms that have been empty (no players) for 30 minutes
  * Or rooms that have been idle for 24 hours
