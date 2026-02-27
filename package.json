@@ -4,17 +4,17 @@
   "description": "Real-time multiplayer Sequence board game",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "cd server && npm run dev",
+    "dev": "concurrently \"npm run dev:worker\" \"npm run dev:client\"",
+    "dev:worker": "cd worker && npx wrangler dev",
     "dev:client": "cd client && npm run dev",
-    "build": "npm run build:client && npm run build:server",
+    "dev:server": "cd server && npm run dev",
+    "build": "npm run build:client",
     "build:client": "cd client && npm run build",
-    "build:server": "cd server && npm run build",
-    "start": "cd server && npm start",
+    "deploy": "cd worker && npx wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "keywords": ["sequence", "board-game", "multiplayer", "socket.io"],
+  "keywords": ["sequence", "board-game", "multiplayer", "cloudflare-workers"],
   "author": "",
   "license": "MIT",
   "devDependencies": {

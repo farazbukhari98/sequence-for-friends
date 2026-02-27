@@ -34,8 +34,16 @@ coverage/
 # TypeScript cache
 *.tsbuildinfo
 
-# Compiled shared types (keep only .ts source)
+# Compiled TypeScript output (keep only .ts source)
+**/*.d.ts
+**/*.d.ts.map
+**/*.js.map
 shared/*.js
-shared/*.js.map
-shared/*.d.ts
-shared/*.d.ts.map
+server/src/**/*.js
+tests/**/*.js
+vitest.config.js
+client/capacitor.config.js
+client/vite.config.js
+
+# Wrangler local dev state
+worker/.wrangler/

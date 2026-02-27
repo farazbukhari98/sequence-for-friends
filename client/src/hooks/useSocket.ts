@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { SequenceWebSocket } from '../lib/websocket';
 import type {
-  ClientToServerEvents,
-  ServerToClientEvents,
   RoomInfo,
   ClientGameState,
   GameAction,
@@ -16,8 +14,6 @@ import type {
   BotDifficulty,
 } from '../../../shared/types';
 
-type SequenceSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
-
 // Game mode info from server
 export interface GameModeInfo {
   modes: string[];
@@ -30,7 +26,7 @@ export interface GameModeInfo {
 }
 
 interface UseSocketReturn {
-  socket: SequenceSocket | null;
+  socket: SequenceWebSocket | null;
   connected: boolean;
   roomInfo: RoomInfo | null;
   gameState: ClientGameState | null;
@@ -43,7 +39,7 @@ interface UseSocketReturn {
   roomClosed: string | null;
   // Actions
   createRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit, sequencesToWin?: SequencesToWin) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
-  createBotGame: (playerName: string, difficulty: BotDifficulty) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
+  createBotGame: (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   joinRoom: (roomCode: string, playerName: string, token?: string) => Promise<{ roomInfo: RoomInfo; playerId: string; token: string } | { error: string }>;
   reconnect: (roomCode: string, token: string) => Promise<{ roomInfo: RoomInfo; gameState?: ClientGameState; playerId: string } | { error: string }>;
   leaveRoom: () => void;
@@ -65,28 +61,39 @@ interface UseSocketReturn {
   clearRoomClosed: () => void;
 }
 
-const PRODUCTION_URL = 'https://sequence-game-uo5u.onrender.com';
+// ============================================
+// URL HELPERS
+// ============================================
 
-function getSocketUrl(): string {
-  if (import.meta.env.VITE_SOCKET_URL) {
-    return import.meta.env.VITE_SOCKET_URL;
+const PRODUCTION_WS_URL = 'wss://sequence-for-friends.farazbukhari98.workers.dev';
+
+function getBaseUrl(): string {
+  if (import.meta.env.VITE_WS_URL) {
+    return import.meta.env.VITE_WS_URL;
   }
-  // Capacitor on iOS/Android: hostname is "localhost" but served via native scheme
+  // Capacitor on iOS/Android
   if (import.meta.env.PROD && window.location.hostname === 'localhost') {
-    return PRODUCTION_URL;
+    return PRODUCTION_WS_URL;
   }
-  // Production web: connect to same origin (server serves the client)
+  // Production web
   if (import.meta.env.PROD) {
-    return window.location.origin;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}`;
   }
-  // Dev mode: local server
-  return 'http://localhost:3001';
+  // Dev mode
+  return 'ws://localhost:8787';
 }
 
-const SOCKET_URL = getSocketUrl();
+function wsUrl(path: string): string {
+  return `${getBaseUrl()}${path}`;
+}
+
+// ============================================
+// HOOK
+// ============================================
 
 export function useSocket(): UseSocketReturn {
-  const socketRef = useRef<SequenceSocket | null>(null);
+  const wsRef = useRef<SequenceWebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
   const [gameState, setGameState] = useState<ClientGameState | null>(null);
@@ -98,101 +105,143 @@ export function useSocket(): UseSocketReturn {
   const [gameModeInfo, setGameModeInfo] = useState<GameModeInfo | null>(null);
   const [roomClosed, setRoomClosed] = useState<string | null>(null);
 
-  // Initialize socket connection
-  useEffect(() => {
-    const socket: SequenceSocket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-    });
+  // Session credentials for auto-reconnect
+  const tokenRef = useRef<string | null>(null);
+  const roomCodeRef = useRef<string | null>(null);
 
-    socketRef.current = socket;
+  /**
+   * Connect a WebSocket to a specific path and register all event listeners.
+   * Cleans up previous connection if any.
+   */
+  const connectWs = useCallback((path: string): SequenceWebSocket => {
+    // Close existing connection
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
 
-    socket.on('connect', () => {
+    const ws = new SequenceWebSocket(wsUrl(path));
+    wsRef.current = ws;
+
+    ws.onOpen = () => {
       console.log('Connected to server');
       setConnected(true);
-    });
+    };
 
-    socket.on('disconnect', () => {
+    ws.onClose = () => {
       console.log('Disconnected from server');
       setConnected(false);
+    };
+
+    ws.onError = () => {
+      // Only show error if we don't have credentials (i.e., not a recoverable disconnect)
+      if (!tokenRef.current) {
+        setError('Connection failed');
+      }
+    };
+
+    // Re-authenticate after auto-reconnect
+    ws.onReconnect = () => {
+      console.log('WebSocket reconnected, re-authenticating...');
+      if (tokenRef.current && roomCodeRef.current) {
+        ws.request('reconnect-to-room', {
+          roomCode: roomCodeRef.current,
+          token: tokenRef.current,
+        }).then((response: any) => {
+          if (response.success) {
+            if (response.roomInfo) setRoomInfo(response.roomInfo);
+            if (response.gameState) setGameState(response.gameState);
+            console.log('Re-authentication successful');
+          } else {
+            console.error('Re-authentication failed:', response.error);
+          }
+        }).catch((err) => {
+          console.error('Re-authentication request failed:', err);
+        });
+      }
+    };
+
+    // Register broadcast event handlers
+    ws.on('error', (data) => {
+      console.error('Server error:', data?.message || data);
+      setError(data?.message || String(data));
     });
 
-    socket.on('error', (message) => {
-      console.error('Server error:', message);
-      setError(message);
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Connection error:', err.message);
-      setError('Connection failed: ' + err.message);
-    });
-
-    socket.on('room-updated', (info) => {
+    ws.on('room-updated', (info) => {
       setRoomInfo(info);
     });
 
-    socket.on('game-started', (state) => {
+    ws.on('game-started', (state) => {
       setGameState(state);
     });
 
-    socket.on('game-state-updated', (state) => {
+    ws.on('game-state-updated', (state) => {
       setGameState(state);
     });
 
-    socket.on('cut-result', (cards, _dealerIndex) => {
-      setCutCards(cards);
+    ws.on('cut-result', (data) => {
+      setCutCards(data?.cutCards || data);
     });
 
-    socket.on('player-joined', (_player) => {
-      // Room update will be sent separately
-    });
-
-    socket.on('player-left', (_playerId) => {
-      // Room update will be sent separately
-    });
-
-    socket.on('player-reconnected', (_playerId) => {
-      // Room update will be sent separately
-    });
-
-    socket.on('player-disconnected', (_playerId) => {
-      // Room update will be sent separately
-    });
-
-    socket.on('game-over', (_winnerTeamIndex, _stalemate) => {
-      // Game state update will include winner
-    });
-
-    socket.on('turn-timeout', (data) => {
+    ws.on('turn-timeout', (data) => {
       setTurnTimeoutInfo(data);
-      // Auto-clear after 3 seconds
       setTimeout(() => setTurnTimeoutInfo(null), 3000);
     });
 
-    socket.on('team-switch-request', (request) => {
+    ws.on('team-switch-request', (request) => {
       setTeamSwitchRequest(request);
     });
 
-    socket.on('team-switch-response', (response) => {
+    ws.on('team-switch-response', (response) => {
       setTeamSwitchResponse(response);
-      // Auto-clear after 5 seconds
       setTimeout(() => setTeamSwitchResponse(null), 5000);
     });
 
-    socket.on('game-mode-changed', (data) => {
+    ws.on('game-mode-changed', (data) => {
       setGameModeInfo(data);
     });
 
-    socket.on('room-closed', (reason) => {
-      setRoomClosed(reason);
+    ws.on('room-closed', (reason) => {
+      setRoomClosed(typeof reason === 'string' ? reason : (reason as any)?.data || 'Room closed');
       setRoomInfo(null);
       setGameState(null);
       setCutCards(null);
+      // Clear credentials — room no longer exists
+      tokenRef.current = null;
+      roomCodeRef.current = null;
     });
 
+    ws.on('game-over', () => {
+      // Game state update will include winner
+    });
+
+    ws.on('player-joined', () => {});
+    ws.on('player-left', () => {});
+    ws.on('player-reconnected', () => {});
+    ws.on('player-disconnected', () => {});
+
+    return ws;
+  }, []);
+
+  /** Store session credentials and configure reconnect URL */
+  const setSessionCredentials = useCallback((roomCode: string, token: string) => {
+    tokenRef.current = token;
+    roomCodeRef.current = roomCode;
+    // Set reconnect URL to the room-specific endpoint (not /ws/create)
+    wsRef.current?.setReconnectUrl(wsUrl(`/ws/room/${roomCode}`));
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
-      socket.disconnect();
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
   }, []);
+
+  // ============================================
+  // ACTIONS - each connects lazily to appropriate WS endpoint
+  // ============================================
 
   const createRoom = useCallback(async (
     roomName: string,
@@ -202,274 +251,244 @@ export function useSocket(): UseSocketReturn {
     turnTimeLimit: TurnTimeLimit = 0,
     sequencesToWin?: SequencesToWin
   ): Promise<{ roomCode: string; playerId: string; token: string } | { error: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ error: 'Not connected to server' });
-        return;
-      }
+    try {
+      const ws = connectWs('/ws/create');
 
-      socketRef.current.emit('create-room', { roomName, playerName, maxPlayers, teamCount, turnTimeLimit, sequencesToWin }, (response) => {
-        if (response.success && response.roomCode && response.playerId && response.token) {
-          resolve({
-            roomCode: response.roomCode,
-            playerId: response.playerId,
-            token: response.token,
-          });
-        } else {
-          resolve({ error: response.error || 'Failed to create room' });
-        }
+      // Wait for connection
+      await waitForOpen(ws);
+
+      const response = await ws.request<any>('create-room', {
+        roomName, playerName, maxPlayers, teamCount, turnTimeLimit, sequencesToWin,
       });
-    });
-  }, []);
+
+      if (response.success && response.roomCode && response.playerId && response.token) {
+        setSessionCredentials(response.roomCode, response.token);
+        return {
+          roomCode: response.roomCode,
+          playerId: response.playerId,
+          token: response.token,
+        };
+      }
+      return { error: response.error || 'Failed to create room' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Failed to create room' };
+    }
+  }, [connectWs, setSessionCredentials]);
 
   const createBotGame = useCallback(async (
     playerName: string,
-    difficulty: BotDifficulty
+    difficulty: BotDifficulty,
+    sequenceLength?: SequenceLength
   ): Promise<{ roomCode: string; playerId: string; token: string } | { error: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ error: 'Not connected to server' });
-        return;
-      }
+    try {
+      const ws = connectWs('/ws/create');
+      await waitForOpen(ws);
 
-      socketRef.current.emit('create-bot-game', { playerName, difficulty }, (response) => {
-        if (response.success && response.roomCode && response.playerId && response.token) {
-          resolve({
-            roomCode: response.roomCode,
-            playerId: response.playerId,
-            token: response.token,
-          });
-        } else {
-          resolve({ error: response.error || 'Failed to create bot game' });
-        }
+      const response = await ws.request<any>('create-bot-game', {
+        playerName, difficulty, sequenceLength,
       });
-    });
-  }, []);
+
+      if (response.success && response.roomCode && response.playerId && response.token) {
+        setSessionCredentials(response.roomCode, response.token);
+        return {
+          roomCode: response.roomCode,
+          playerId: response.playerId,
+          token: response.token,
+        };
+      }
+      return { error: response.error || 'Failed to create bot game' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Failed to create bot game' };
+    }
+  }, [connectWs, setSessionCredentials]);
 
   const joinRoom = useCallback(async (
     roomCode: string,
     playerName: string,
     token?: string
   ): Promise<{ roomInfo: RoomInfo; playerId: string; token: string } | { error: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ error: 'Not connected to server' });
-        return;
-      }
+    try {
+      const ws = connectWs(`/ws/room/${roomCode.toUpperCase()}`);
+      await waitForOpen(ws);
 
-      socketRef.current.emit('join-room', { roomCode, playerName, token }, (response) => {
-        if (response.success && response.roomInfo && response.playerId && response.token) {
-          setRoomInfo(response.roomInfo);
-          resolve({
-            roomInfo: response.roomInfo,
-            playerId: response.playerId,
-            token: response.token,
-          });
-        } else {
-          resolve({ error: response.error || 'Failed to join room' });
-        }
+      const response = await ws.request<any>('join-room', {
+        roomCode, playerName, token,
       });
-    });
-  }, []);
+
+      if (response.success && response.roomInfo && response.playerId && response.token) {
+        setRoomInfo(response.roomInfo);
+        setSessionCredentials(roomCode.toUpperCase(), response.token);
+        return {
+          roomInfo: response.roomInfo,
+          playerId: response.playerId,
+          token: response.token,
+        };
+      }
+      return { error: response.error || 'Failed to join room' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Failed to join room' };
+    }
+  }, [connectWs, setSessionCredentials]);
 
   const reconnect = useCallback(async (
     roomCode: string,
     token: string
   ): Promise<{ roomInfo: RoomInfo; gameState?: ClientGameState; playerId: string } | { error: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ error: 'Not connected to server' });
-        return;
-      }
+    try {
+      const ws = connectWs(`/ws/reconnect?token=${encodeURIComponent(token)}`);
+      await waitForOpen(ws);
 
-      socketRef.current.emit('reconnect-to-room', { roomCode, token }, (response) => {
-        if (response.success && response.roomInfo && response.playerId) {
-          setRoomInfo(response.roomInfo);
-          if (response.gameState) {
-            setGameState(response.gameState);
-          }
-          resolve({
-            roomInfo: response.roomInfo,
-            gameState: response.gameState,
-            playerId: response.playerId,
-          });
-        } else {
-          resolve({ error: response.error || 'Failed to reconnect' });
-        }
+      const response = await ws.request<any>('reconnect-to-room', {
+        roomCode, token,
       });
-    });
-  }, []);
+
+      if (response.success && response.roomInfo && response.playerId) {
+        setRoomInfo(response.roomInfo);
+        if (response.gameState) {
+          setGameState(response.gameState);
+        }
+        setSessionCredentials(roomCode.toUpperCase(), token);
+        return {
+          roomInfo: response.roomInfo,
+          gameState: response.gameState,
+          playerId: response.playerId,
+        };
+      }
+      return { error: response.error || 'Failed to reconnect' };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Failed to reconnect' };
+    }
+  }, [connectWs, setSessionCredentials]);
 
   const leaveRoom = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.emit('leave-room');
-      setRoomInfo(null);
-      setGameState(null);
-      setCutCards(null);
+    if (wsRef.current) {
+      wsRef.current.send('leave-room');
+      wsRef.current.close();
+      wsRef.current = null;
     }
+    tokenRef.current = null;
+    roomCodeRef.current = null;
+    setRoomInfo(null);
+    setGameState(null);
+    setCutCards(null);
+    setConnected(false);
   }, []);
 
   const kickPlayer = useCallback((playerId: string) => {
-    if (socketRef.current) {
-      socketRef.current.emit('kick-player', playerId);
-    }
+    wsRef.current?.send('kick-player', { playerId });
   }, []);
 
   const addBot = useCallback(async (
     difficulty: BotDifficulty
   ): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ success: false, error: 'Not connected to server' });
-        return;
-      }
-
-      socketRef.current.emit('add-bot', { difficulty }, (response) => {
-        resolve(response);
-      });
-    });
+    if (!wsRef.current) return { success: false, error: 'Not connected to server' };
+    try {
+      const response = await wsRef.current.request<any>('add-bot', { difficulty });
+      return { success: response.success !== false, error: response.error };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed' };
+    }
   }, []);
 
   const startGame = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ success: false, error: 'Not connected to server' });
-        return;
-      }
-
-      socketRef.current.emit('start-game', (response) => {
-        resolve(response);
-      });
-    });
+    if (!wsRef.current) return { success: false, error: 'Not connected to server' };
+    try {
+      const response = await wsRef.current.request<any>('start-game');
+      return { success: response.success !== false, error: response.error };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed' };
+    }
   }, []);
 
   const sendAction = useCallback(async (action: GameAction): Promise<MoveResult> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ success: false, error: 'Not connected to server' });
-        return;
+    if (!wsRef.current) return { success: false, error: 'Not connected to server' };
+    try {
+      const response = await wsRef.current.request<any>('game-action', action);
+      if (!response.success && response.error) {
+        setError(response.error);
       }
-
-      socketRef.current.emit('game-action', action, (response) => {
-        if (!response.success && response.error) {
-          setError(response.error);
-        }
-        resolve(response);
-      });
-    });
+      return response as MoveResult;
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed' };
+    }
   }, []);
 
   const updateRoomSettings = useCallback(async (
     settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }
   ): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ success: false, error: 'Not connected to server' });
-        return;
-      }
-
-      socketRef.current.emit('update-room-settings', settings, (response) => {
-        resolve(response);
-      });
-    });
+    if (!wsRef.current) return { success: false, error: 'Not connected to server' };
+    try {
+      const response = await wsRef.current.request<any>('update-room-settings', settings);
+      return { success: response.success !== false, error: response.error };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed' };
+    }
   }, []);
 
   const toggleReady = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ success: false, error: 'Not connected to server' });
-        return;
-      }
-
-      socketRef.current.emit('toggle-ready', (response) => {
-        resolve(response);
-      });
-    });
+    if (!wsRef.current) return { success: false, error: 'Not connected to server' };
+    try {
+      const response = await wsRef.current.request<any>('toggle-ready');
+      return { success: response.success !== false, error: response.error };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed' };
+    }
   }, []);
 
   const requestTeamSwitch = useCallback(async (
     toTeamIndex: number
   ): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ success: false, error: 'Not connected to server' });
-        return;
-      }
-
-      socketRef.current.emit('request-team-switch', toTeamIndex, (response) => {
-        resolve(response);
-      });
-    });
+    if (!wsRef.current) return { success: false, error: 'Not connected to server' };
+    try {
+      const response = await wsRef.current.request<any>('request-team-switch', { toTeamIndex });
+      return { success: response.success !== false, error: response.error };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed' };
+    }
   }, []);
 
   const respondTeamSwitch = useCallback(async (
     playerId: string,
     approved: boolean
   ): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ success: false, error: 'Not connected to server' });
-        return;
-      }
-
-      socketRef.current.emit('respond-team-switch', { playerId, approved }, (response) => {
-        resolve(response);
-      });
-    });
+    if (!wsRef.current) return { success: false, error: 'Not connected to server' };
+    try {
+      const response = await wsRef.current.request<any>('respond-team-switch', { playerId, approved });
+      return { success: response.success !== false, error: response.error };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed' };
+    }
   }, []);
 
   const continueSeries = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ success: false, error: 'Not connected to server' });
-        return;
-      }
-
-      socketRef.current.emit('continue-series', (response) => {
-        resolve(response);
-      });
-    });
+    if (!wsRef.current) return { success: false, error: 'Not connected to server' };
+    try {
+      const response = await wsRef.current.request<any>('continue-series');
+      return { success: response.success !== false, error: response.error };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed' };
+    }
   }, []);
 
   const endSeries = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      if (!socketRef.current) {
-        resolve({ success: false, error: 'Not connected to server' });
-        return;
-      }
-
-      socketRef.current.emit('end-series', (response) => {
-        resolve(response);
-      });
-    });
+    if (!wsRef.current) return { success: false, error: 'Not connected to server' };
+    try {
+      const response = await wsRef.current.request<any>('end-series');
+      return { success: response.success !== false, error: response.error };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed' };
+    }
   }, []);
 
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
-
-  const clearTurnTimeoutInfo = useCallback(() => {
-    setTurnTimeoutInfo(null);
-  }, []);
-
-  const clearTeamSwitchRequest = useCallback(() => {
-    setTeamSwitchRequest(null);
-  }, []);
-
-  const clearTeamSwitchResponse = useCallback(() => {
-    setTeamSwitchResponse(null);
-  }, []);
-
-  const clearGameModeInfo = useCallback(() => {
-    setGameModeInfo(null);
-  }, []);
-
-  const clearRoomClosed = useCallback(() => {
-    setRoomClosed(null);
-  }, []);
+  const clearError = useCallback(() => setError(null), []);
+  const clearTurnTimeoutInfo = useCallback(() => setTurnTimeoutInfo(null), []);
+  const clearTeamSwitchRequest = useCallback(() => setTeamSwitchRequest(null), []);
+  const clearTeamSwitchResponse = useCallback(() => setTeamSwitchResponse(null), []);
+  const clearGameModeInfo = useCallback(() => setGameModeInfo(null), []);
+  const clearRoomClosed = useCallback(() => setRoomClosed(null), []);
 
   return {
-    socket: socketRef.current,
+    socket: wsRef.current,
     connected,
     roomInfo,
     gameState,
@@ -502,4 +521,35 @@ export function useSocket(): UseSocketReturn {
     clearGameModeInfo,
     clearRoomClosed,
   };
+}
+
+// ============================================
+// HELPERS
+// ============================================
+
+function waitForOpen(ws: SequenceWebSocket, timeoutMs = 5000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (ws.connected) {
+      resolve();
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      reject(new Error('Connection timeout'));
+    }, timeoutMs);
+
+    const originalOnOpen = ws.onOpen;
+    ws.onOpen = () => {
+      clearTimeout(timeout);
+      originalOnOpen?.();
+      resolve();
+    };
+
+    const originalOnError = ws.onError;
+    ws.onError = (e) => {
+      clearTimeout(timeout);
+      originalOnError?.(e);
+      reject(new Error('Connection failed'));
+    };
+  });
 }

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN, BotDifficulty } from '../../../../shared/types';
+import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN, BotDifficulty, SequenceLength, DEFAULT_SEQUENCE_LENGTH } from '../../../../shared/types';
 import './HomeScreen.css';
 
 interface HomeScreenProps {
   onCreateRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit, sequencesToWin: SequencesToWin) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
-  onCreateBotGame: (playerName: string, difficulty: BotDifficulty) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
+  onCreateBotGame: (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
   onJoinRoom: (roomCode: string, playerName: string) => Promise<{ roomInfo?: unknown; playerId?: string; token?: string; error?: string }>;
   initialRoomCode?: string;
 }
@@ -18,6 +18,7 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
   const [turnTimeLimit, setTurnTimeLimit] = useState<TurnTimeLimit>(0);
   const [sequencesToWin, setSequencesToWin] = useState<SequencesToWin>(DEFAULT_SEQUENCES_TO_WIN);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
+  const [botSequenceLength, setBotSequenceLength] = useState<SequenceLength>(DEFAULT_SEQUENCE_LENGTH);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,7 +81,7 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
     setLoading(true);
     setError(null);
 
-    const result = await onCreateBotGame(playerName.trim(), botDifficulty);
+    const result = await onCreateBotGame(playerName.trim(), botDifficulty, botSequenceLength);
     setLoading(false);
 
     if (result.error) {
@@ -345,6 +346,26 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
                   </span>
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Game Mode</label>
+            <div className="difficulty-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+              <button
+                className={`difficulty-btn ${botSequenceLength === 5 ? 'active' : ''}`}
+                onClick={() => setBotSequenceLength(5)}
+              >
+                <span className="difficulty-label">Standard</span>
+                <span className="difficulty-desc">5 in a row</span>
+              </button>
+              <button
+                className={`difficulty-btn ${botSequenceLength === 4 ? 'active' : ''}`}
+                onClick={() => setBotSequenceLength(4)}
+              >
+                <span className="difficulty-label">Blitz</span>
+                <span className="difficulty-desc">4 in a row</span>
+              </button>
             </div>
           </div>
 

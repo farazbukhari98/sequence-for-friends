@@ -429,7 +429,7 @@ export interface QuickMessageData {
 
 // Client -> Server events
 export interface ClientToServerEvents {
-  'create-bot-game': (data: { playerName: string; difficulty: BotDifficulty }, callback: (response: CreateRoomResponse) => void) => void;
+  'create-bot-game': (data: { playerName: string; difficulty: BotDifficulty; sequenceLength?: SequenceLength }, callback: (response: CreateRoomResponse) => void) => void;
   'add-bot': (data: { difficulty: BotDifficulty }, callback: (response: { success: boolean; error?: string }) => void) => void;
   'remove-bot': (data: { botPlayerId: string }, callback: (response: { success: boolean; error?: string }) => void) => void;
   'create-room': (data: { roomName: string; playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }, callback: (response: CreateRoomResponse) => void) => void;

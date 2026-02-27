@@ -87,7 +87,7 @@ export function LobbyScreen({
   };
 
   const handleShare = async () => {
-    const shareUrl = `https://sequence-game-uo5u.onrender.com/join/${roomInfo.code}`;
+    const shareUrl = `https://sequence-for-friends.farazbukhari98.workers.dev/join/${roomInfo.code}`;
     const shareText = `Join my Sequence game "${roomInfo.name}"! Room code: ${roomInfo.code}`;
 
     if (Capacitor.isNativePlatform()) {

@@ -6,7 +6,7 @@ import { HomeScreen } from './redesign/components/HomeScreen';
 import { LobbyScreen } from './redesign/components/LobbyScreen';
 import { GameScreen } from './redesign/components/GameScreen';
 import { Toast } from './components/Toast';
-import type { TurnTimeLimit, SequencesToWin, BotDifficulty } from '../../shared/types';
+import type { TurnTimeLimit, SequencesToWin, BotDifficulty, SequenceLength } from '../../shared/types';
 
 type Screen = 'home' | 'lobby' | 'game';
 
@@ -27,6 +27,8 @@ function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [urlRoomCode, setUrlRoomCode] = useState<string | null>(getRoomCodeFromURL);
+  const [showReconnectOverlay, setShowReconnectOverlay] = useState(false);
+  const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     connected,
@@ -152,8 +154,8 @@ function App() {
   };
 
   // Handle creating a bot game
-  const handleCreateBotGame = async (playerName: string, difficulty: BotDifficulty) => {
-    const result = await createBotGame(playerName, difficulty);
+  const handleCreateBotGame = async (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength) => {
+    const result = await createBotGame(playerName, difficulty, sequenceLength);
     if ('error' in result) {
       return result;
     }
@@ -206,6 +208,26 @@ function App() {
     }
   }, [roomInfo]);
 
+  // Delay showing reconnect overlay to prevent flashing on brief disconnects
+  useEffect(() => {
+    if (!connected && screen !== 'home') {
+      overlayTimerRef.current = setTimeout(() => {
+        setShowReconnectOverlay(true);
+      }, 1500);
+    } else {
+      if (overlayTimerRef.current) {
+        clearTimeout(overlayTimerRef.current);
+        overlayTimerRef.current = null;
+      }
+      setShowReconnectOverlay(false);
+    }
+    return () => {
+      if (overlayTimerRef.current) {
+        clearTimeout(overlayTimerRef.current);
+      }
+    };
+  }, [connected, screen]);
+
   // Handle starting the game
   const handleStartGame = async () => {
     const result = await startGame();
@@ -217,7 +239,7 @@ function App() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {!connected && (
+      {showReconnectOverlay && (
         <div style={{
           position: 'fixed',
           inset: 0,
@@ -229,7 +251,7 @@ function App() {
         }}>
           <div style={{ textAlign: 'center' }}>
             <div className="animate-pulse" style={{ color: 'var(--accent-primary)', fontSize: '1.25rem', marginBottom: '0.5rem' }}>
-              Connecting...
+              Reconnecting...
             </div>
             <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
               Please wait

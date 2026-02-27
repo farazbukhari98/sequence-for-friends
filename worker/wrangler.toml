@@ -1,0 +1,19 @@
+name = "sequence-for-friends"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "2a1360de87fa37bb0cf817af875f2cb4"
+
+[durable_objects]
+bindings = [
+  { name = "ROOM", class_name = "RoomDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["RoomDO"]
+
+[[kv_namespaces]]
+binding = "PLAYER_TOKENS"
+id = "cb6bc834fe334f40b9e6c977681aee5e"
+preview_id = "55f0b7a8610f48c1a255e073d1becb07"

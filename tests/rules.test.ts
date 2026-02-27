@@ -8,9 +8,9 @@ import {
   TEAM_COLORS_2,
   TEAM_COLORS_3,
 } from '../shared/types';
-import { detectNewSequences, lockSequenceCells, isCellLocked } from '../server/src/rules/sequences';
-import { isLegalMove, applyMove, isDeadCard, getLegalTargets } from '../server/src/rules/engine';
-import { createDeck, shuffleDeck, dealCards } from '../server/src/rules/deck';
+import { detectNewSequences, lockSequenceCells, isCellLocked } from '../worker/src/rules/sequences';
+import { isLegalMove, applyMove, isDeadCard, getLegalTargets } from '../worker/src/rules/engine';
+import { createDeck, shuffleDeck, dealCards } from '../worker/src/rules/deck';
 
 // Helper to create an empty board
 function createEmptyBoard(): BoardChips {
@@ -27,6 +27,7 @@ function createTestPlayer(id: string, teamIndex: number, teamColor: TeamColor, h
     teamIndex,
     teamColor,
     connected: true,
+    ready: true,
     hand,
     discardPile: [],
   };
@@ -45,6 +46,7 @@ function createTestGameState(
       teamCount,
       teamColors: teamCount === 2 ? TEAM_COLORS_2 : TEAM_COLORS_3,
       sequencesToWin: teamCount === 2 ? 2 : 1,
+      sequenceLength: 5,
       handSize: 7,
     },
     players,
@@ -61,6 +63,10 @@ function createTestGameState(
     cutCards: [],
     winnerTeamIndex: null,
     lastMove: null,
+    turnTimeLimit: 0,
+    turnStartedAt: null,
+    sequenceTimestamps: new Map(),
+    eventLog: [],
   };
 }
 

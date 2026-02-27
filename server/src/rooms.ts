@@ -498,10 +498,23 @@ export function endSeries(roomCode: string, hostId: string): Room | { error: str
     return { error: 'Only the host can end the series' };
   }
 
-  // Reset to lobby state
+  // Record the current game's win into seriesState before clearing gameState
+  if (room.seriesState && room.gameState?.winnerTeamIndex != null) {
+    room.seriesState.teamWins[room.gameState.winnerTeamIndex]++;
+    room.seriesState.gamesPlayed++;
+    // Set the leading team as the series winner for display
+    let leadingTeam = 0;
+    for (let i = 1; i < room.seriesState.teamWins.length; i++) {
+      if (room.seriesState.teamWins[i] > room.seriesState.teamWins[leadingTeam]) {
+        leadingTeam = i;
+      }
+    }
+    room.seriesState.seriesWinnerTeamIndex = leadingTeam;
+  }
+
+  // Reset to lobby state but preserve seriesState for the "Series Complete!" screen
   room.phase = 'waiting';
   room.gameState = null;
-  room.seriesState = null;
 
   // Reset player ready states
   for (const player of room.players) {

@@ -3,11 +3,11 @@ services:
     name: sequence-for-friends
     runtime: node
     plan: free
-    buildCommand: npm install --include=dev && cd client && npm install --include=dev && cd ../server && npm install --include=dev && cd .. && npm run build
+    buildCommand: npm install --include=dev && cd server && npm install --include=dev && cd .. && npm run build:server
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: "10000"
-    healthCheckPath: /
+    healthCheckPath: /.well-known/apple-app-site-association

@@ -1,8 +1,6 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 import type {
   ClientToServerEvents,
@@ -42,8 +40,6 @@ import {
 import { applyMove } from './rules/engine.js';
 import { decideBotAction, getBotDelay } from './bot.js';
 
-const __filename = fileURLToPath(import.meta.url);
-
 /**
  * Determine which special game modes are active based on settings
  */
@@ -63,7 +59,6 @@ function getActiveModes(settings: { sequenceLength: number; turnTimeLimit: numbe
 
   return modes;
 }
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
@@ -76,10 +71,6 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     methods: ['GET', 'POST'],
   },
 });
-
-// Serve the built client (always in production, optionally in dev)
-// The compiled server is at dist/server/src/, so we need to go up to project root
-const clientPath = path.join(__dirname, '../../../../client/dist');
 
 // Apple App Site Association for Universal Links
 // This file must be served with correct content type for iOS to recognize it
@@ -99,7 +90,7 @@ app.get('/.well-known/apple-app-site-association', (_req, res) => {
 });
 
 // /join/:code route for Universal Links and shared invite links
-// Tries to open the native app first via custom URL scheme, falls back to web
+// Tries to open the native app first via custom URL scheme, falls back to App Store
 app.get('/join/:code', (req, res) => {
   const roomCode = req.params.code.toUpperCase().replace(/[^A-Z0-9]/g, '');
   res.send(`<!DOCTYPE html>
@@ -114,21 +105,19 @@ app.get('/join/:code', (req, res) => {
   h1 { font-size: 1.5rem; margin-bottom: 8px; }
   p { color: #888; margin-bottom: 24px; }
   .btn { display: inline-block; background: #6366f1; color: #fff; padding: 14px 32px;
-    border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 1rem; }
-  .fallback { margin-top: 16px; font-size: 0.85rem; color: #666; }
-  .fallback a { color: #6366f1; }
+    border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 1rem; margin-bottom: 12px; }
+  .store-link { display: inline-block; color: #6366f1; font-size: 0.9rem; }
 </style>
 </head><body>
 <div class="container">
   <h1>Sequence for Friends</h1>
   <p>You've been invited to join a game!</p>
   <a class="btn" id="openApp" href="sequencegame://join/${roomCode}">Open in App</a>
-  <div class="fallback">
-    <p>Don't have the app? <a href="/?room=${roomCode}">Play on web</a></p>
-  </div>
+  <br>
+  <a class="store-link" href="https://apps.apple.com/app/sequence-for-friends/id6744899989">Don't have the app? Download from the App Store</a>
 </div>
 <script>
-  // Try to open the app automatically
+  // Try to open the app automatically via custom URL scheme (fallback for when Universal Links don't fire)
   window.location.href = 'sequencegame://join/${roomCode}';
 </script>
 </body></html>`);
@@ -183,9 +172,9 @@ app.get('/privacy', (_req, res) => {
 </html>`);
 });
 
-app.use(express.static(clientPath));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(clientPath, 'index.html'));
+// Redirect root to App Store (no web client served)
+app.get('/', (_req, res) => {
+  res.redirect('https://apps.apple.com/app/sequence-for-friends/id6744899989');
 });
 
 // Track socket to player/room mapping
@@ -483,6 +472,8 @@ io.on('connection', (socket) => {
         2,   // maxPlayers
         2,   // teamCount
         0,   // no turn time limit
+        undefined, // default sequencesToWin
+        data.sequenceLength, // blitz mode support
       );
 
       // Add a bot
