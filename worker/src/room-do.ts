@@ -54,7 +54,12 @@ interface SerializedRoom {
 }
 
 function serializeRoom(room: Room): SerializedRoom {
-  const result: SerializedRoom = { room: { ...room } };
+  // Deep-enough copy: shallow-copy room AND gameState so we don't mutate live state
+  const roomCopy = { ...room };
+  if (room.gameState) {
+    roomCopy.gameState = { ...room.gameState };
+  }
+  const result: SerializedRoom = { room: roomCopy };
 
   if (room.gameState) {
     const gs = room.gameState;
@@ -65,7 +70,7 @@ function serializeRoom(room: Room): SerializedRoom {
     result.sequencesCompleted = Array.from(gs.sequencesCompleted.entries());
     result.sequenceTimestamps = Array.from(gs.sequenceTimestamps.entries());
 
-    // Replace Maps with placeholder (will be restored on deserialize)
+    // Null out Maps on the COPY only (not the live gameState)
     (result.room.gameState as any).lockedCells = null;
     (result.room.gameState as any).sequencesCompleted = null;
     (result.room.gameState as any).sequenceTimestamps = null;

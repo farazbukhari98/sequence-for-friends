@@ -7,9 +7,9 @@ import {
   CardCode,
   TEAM_COLORS_2,
 } from '../shared/types';
-import { createBotPlayer, generateBotName, decideBotAction, getBotDelay, BOT_NAMES } from '../server/src/bot';
-import { createDeck } from '../server/src/rules/deck';
-import { isDeadCard } from '../server/src/rules/engine';
+import { createBotPlayer, generateBotName, decideBotAction, getBotDelay, BOT_NAMES } from '../worker/src/bot';
+import { createDeck } from '../worker/src/rules/deck';
+import { isDeadCard } from '../worker/src/rules/engine';
 
 // Helper to create an empty board
 function createEmptyBoard(): BoardChips {
