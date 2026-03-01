@@ -40,7 +40,7 @@ interface UseSocketReturn {
   roomClosed: string | null;
   // Actions
   createRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit, sequencesToWin?: SequencesToWin) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
-  createBotGame: (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
+  createBotGame: (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength, sequencesToWin?: SequencesToWin, seriesLength?: SeriesLength) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   joinRoom: (roomCode: string, playerName: string, token?: string) => Promise<{ roomInfo: RoomInfo; playerId: string; token: string } | { error: string }>;
   reconnect: (roomCode: string, token: string) => Promise<{ roomInfo: RoomInfo; gameState?: ClientGameState; playerId: string } | { error: string }>;
   leaveRoom: () => void;
@@ -275,14 +275,16 @@ export function useSocket(): UseSocketReturn {
   const createBotGame = useCallback(async (
     playerName: string,
     difficulty: BotDifficulty,
-    sequenceLength?: SequenceLength
+    sequenceLength?: SequenceLength,
+    sequencesToWin?: SequencesToWin,
+    seriesLength?: SeriesLength
   ): Promise<{ roomCode: string; playerId: string; token: string } | { error: string }> => {
     try {
       const ws = connectWs('/ws/create');
       await waitForOpen(ws);
 
       const response = await ws.request<any>('create-bot-game', {
-        playerName, difficulty, sequenceLength,
+        playerName, difficulty, sequenceLength, sequencesToWin, seriesLength,
       });
 
       if (response.success && response.roomCode && response.playerId && response.token) {

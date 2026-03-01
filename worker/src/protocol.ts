@@ -35,6 +35,8 @@ export interface CreateBotGameMessage {
     playerName: string;
     difficulty: BotDifficulty;
     sequenceLength?: SequenceLength;
+    sequencesToWin?: SequencesToWin;
+    seriesLength?: SeriesLength;
   };
 }
 

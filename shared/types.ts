@@ -160,9 +160,10 @@ export const TURN_TIME_OPTIONS: { value: TurnTimeLimit; label: string }[] = [
 // SEQUENCES TO WIN
 // ============================================
 
-export type SequencesToWin = 2 | 3 | 4;
+export type SequencesToWin = 1 | 2 | 3 | 4;
 
 export const SEQUENCES_TO_WIN_OPTIONS: { value: SequencesToWin; label: string }[] = [
+  { value: 1, label: '1 sequence' },
   { value: 2, label: '2 sequences' },
   { value: 3, label: '3 sequences' },
   { value: 4, label: '4 sequences' },

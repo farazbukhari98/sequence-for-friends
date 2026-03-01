@@ -158,8 +158,8 @@ export function createRoomData(
     throw new Error(`Player count ${maxPlayers} must be divisible by team count ${teamCount}`);
   }
 
-  if (![2, 3, 4].includes(sequencesToWin)) {
-    throw new Error(`Invalid sequences to win: ${sequencesToWin}. Must be 2, 3, or 4`);
+  if (![1, 2, 3, 4].includes(sequencesToWin)) {
+    throw new Error(`Invalid sequences to win: ${sequencesToWin}. Must be 1, 2, 3, or 4`);
   }
 
   if (![4, 5].includes(sequenceLength)) {
@@ -290,8 +290,8 @@ export function updateRoomSettings(
   }
 
   if (settings.sequencesToWin !== undefined) {
-    if (![2, 3, 4].includes(settings.sequencesToWin)) {
-      return { error: `Invalid sequences to win: ${settings.sequencesToWin}. Must be 2, 3, or 4` };
+    if (![1, 2, 3, 4].includes(settings.sequencesToWin)) {
+      return { error: `Invalid sequences to win: ${settings.sequencesToWin}. Must be 1, 2, 3, or 4` };
     }
     room.sequencesToWin = settings.sequencesToWin;
   }

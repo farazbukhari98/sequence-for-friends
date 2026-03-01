@@ -10,6 +10,8 @@ import type {
   PublicPlayer,
   RoomInfo,
   SeriesState,
+  GameEvent,
+  BoardChips,
 } from '../../../../shared/types';
 import {
   findCardPositions,
@@ -22,6 +24,7 @@ import { usePinchZoom } from '../../hooks/usePinchZoom';
 import { Board } from './Board';
 import { Hand } from './Hand';
 import { TurnTimer } from '../../components/TurnTimer';
+import { ReplayBoard } from './ReplayBoard';
 import './GameScreen.css';
 
 interface GameScreenProps {
@@ -432,6 +435,9 @@ export function GameScreen({
           myTeamIndex={myPlayer?.teamIndex ?? -1}
           seriesState={roomInfo?.seriesState ?? null}
           isHost={roomInfo?.hostId === playerId}
+          isBotGame={gameState.players.some(p => p.isBot)}
+          eventLog={gameState.eventLog}
+          boardChips={gameState.boardChips}
           onLeave={onLeave}
           onContinueSeries={onContinueSeries}
           onEndSeries={onEndSeries}
@@ -643,6 +649,9 @@ interface WinnerModalProps {
   myTeamIndex: number;
   seriesState: SeriesState | null;
   isHost: boolean;
+  isBotGame: boolean;
+  eventLog: GameEvent[];
+  boardChips: BoardChips;
   onLeave: () => void;
   onContinueSeries: () => Promise<{ success: boolean; error?: string }>;
   onEndSeries: () => Promise<{ success: boolean; error?: string }>;
@@ -651,10 +660,12 @@ interface WinnerModalProps {
 
 function WinnerModal({
   completedSequences, winnerTeamIndex, teamColors, players, myTeamIndex,
-  seriesState, isHost, onLeave, onContinueSeries, onEndSeries, onReturnToLobby,
+  seriesState, isHost, isBotGame, eventLog, boardChips,
+  onLeave, onContinueSeries, onEndSeries, onReturnToLobby,
 }: WinnerModalProps) {
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(5);
+  const [showReplay, setShowReplay] = useState(false);
   const isWinner = winnerTeamIndex === myTeamIndex;
   const winnerColor = teamColors[winnerTeamIndex];
   const winningPlayers = players.filter(p => p.teamIndex === winnerTeamIndex);
@@ -820,8 +831,29 @@ function WinnerModal({
               Back to Home
             </button>
           )}
+
+          {isBotGame && (
+            <button
+              className="btn btn-secondary winner-btn"
+              onClick={() => setShowReplay(true)}
+              style={{ marginTop: isSeries ? '0.5rem' : 0 }}
+            >
+              Watch Replay
+            </button>
+          )}
         </div>
       </div>
+
+      {showReplay && (
+        <ReplayBoard
+          eventLog={eventLog}
+          boardChips={boardChips}
+          completedSequences={completedSequences}
+          winnerTeamIndex={winnerTeamIndex}
+          teamColors={teamColors}
+          onClose={() => setShowReplay(false)}
+        />
+      )}
     </div>
   );
 }

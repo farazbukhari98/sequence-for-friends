@@ -12,7 +12,7 @@ import { GameScreen } from './redesign/components/GameScreen';
 import { ProfileScreen } from './redesign/components/ProfileScreen';
 import { FriendsScreen } from './redesign/components/FriendsScreen';
 import { Toast } from './components/Toast';
-import type { TurnTimeLimit, SequencesToWin, BotDifficulty, SequenceLength } from '../../shared/types';
+import type { TurnTimeLimit, SequencesToWin, BotDifficulty, SequenceLength, SeriesLength } from '../../shared/types';
 
 type Screen = 'auth' | 'onboarding' | 'home' | 'profile' | 'friends' | 'lobby' | 'game';
 
@@ -218,9 +218,9 @@ function App() {
   };
 
   // Handle creating a bot game
-  const handleCreateBotGame = async (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength) => {
+  const handleCreateBotGame = async (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength, sequencesToWin?: SequencesToWin, seriesLength?: SeriesLength) => {
     const name = user?.displayName || playerName;
-    const result = await createBotGame(name, difficulty, sequenceLength);
+    const result = await createBotGame(name, difficulty, sequenceLength, sequencesToWin, seriesLength);
     if ('error' in result) {
       return result;
     }

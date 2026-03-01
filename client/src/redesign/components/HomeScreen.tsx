@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN, BotDifficulty, SequenceLength, DEFAULT_SEQUENCE_LENGTH } from '../../../../shared/types';
+import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, SERIES_LENGTH_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN, BotDifficulty, SequenceLength, SeriesLength, DEFAULT_SEQUENCE_LENGTH, DEFAULT_SERIES_LENGTH } from '../../../../shared/types';
 import type { UserProfile } from '../../../../shared/types';
 import { getAvatarEmoji } from '../../lib/avatars';
 import './HomeScreen.css';
 
 interface HomeScreenProps {
   onCreateRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit, sequencesToWin: SequencesToWin) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
-  onCreateBotGame: (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
+  onCreateBotGame: (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength, sequencesToWin?: SequencesToWin, seriesLength?: SeriesLength) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
   onJoinRoom: (roomCode: string, playerName: string) => Promise<{ roomInfo?: unknown; playerId?: string; token?: string; error?: string }>;
   initialRoomCode?: string;
   onClearRoomCode?: () => void;
@@ -25,6 +25,8 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
   const [sequencesToWin, setSequencesToWin] = useState<SequencesToWin>(DEFAULT_SEQUENCES_TO_WIN);
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('medium');
   const [botSequenceLength, setBotSequenceLength] = useState<SequenceLength>(DEFAULT_SEQUENCE_LENGTH);
+  const [botSequencesToWin, setBotSequencesToWin] = useState<SequencesToWin>(DEFAULT_SEQUENCES_TO_WIN);
+  const [botSeriesLength, setBotSeriesLength] = useState<SeriesLength>(DEFAULT_SERIES_LENGTH);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,7 +92,7 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
     setLoading(true);
     setError(null);
 
-    const result = await onCreateBotGame(name, botDifficulty, botSequenceLength);
+    const result = await onCreateBotGame(name, botDifficulty, botSequenceLength, botSequencesToWin, botSeriesLength);
     setLoading(false);
 
     if (result.error) {
@@ -367,7 +369,7 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
                 >
                   <span className="difficulty-label">{diff.charAt(0).toUpperCase() + diff.slice(1)}</span>
                   <span className="difficulty-desc">
-                    {diff === 'easy' ? 'Random moves' : diff === 'medium' ? 'Smart plays' : diff === 'hard' ? 'Expert strategy' : 'Ruthless AI'}
+                    {diff === 'easy' ? 'Simple moves' : diff === 'medium' ? 'Smarter plays \u00b7 30s timer' : diff === 'hard' ? 'Tough opponent \u00b7 20s timer' : 'Ruthless AI \u00b7 15s timer'}
                   </span>
                 </button>
               ))}
@@ -391,6 +393,40 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
                 <span className="difficulty-label">Blitz</span>
                 <span className="difficulty-desc">4 in a row</span>
               </button>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Sequences to Win</label>
+            <div className="sequences-to-win-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  className={"sequences-btn " + (botSequencesToWin === option.value ? 'active' : '')}
+                  onClick={() => setBotSequencesToWin(option.value)}
+                >
+                  {option.value}
+                </button>
+              ))}
+            </div>
+            <p className="form-hint mt-sm">
+              First to complete {botSequencesToWin} sequence{botSequencesToWin > 1 ? 's' : ''} wins
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label>Series</label>
+            <div className="difficulty-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+              {SERIES_LENGTH_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  className={`difficulty-btn ${botSeriesLength === option.value ? 'active' : ''}`}
+                  onClick={() => setBotSeriesLength(option.value)}
+                >
+                  <span className="difficulty-label">{option.value === 0 ? 'Single' : `Bo${option.value}`}</span>
+                  <span className="difficulty-desc">{option.label}</span>
+                </button>
+              ))}
             </div>
           </div>
 

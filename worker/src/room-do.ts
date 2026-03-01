@@ -441,15 +441,21 @@ export class RoomDO implements DurableObject {
   }
 
   private async handleCreateBotGame(ws: WebSocket, msg: ClientMessage & { type: 'create-bot-game' }): Promise<void> {
-    const { playerName, difficulty, sequenceLength } = msg.data;
+    const { playerName, difficulty, sequenceLength, sequencesToWin, seriesLength } = msg.data;
     const tags = this.state.getTags(ws);
     const roomCode = tags[1] || '';
     const userId = tags[4] || undefined;
 
+    // Derive turn timer from difficulty
+    const turnTimerByDifficulty: Record<string, number> = {
+      easy: 0, medium: 30, hard: 20, impossible: 15,
+    };
+    const turnTimeLimit = (turnTimerByDifficulty[difficulty] ?? 0) as import('../../shared/types.js').TurnTimeLimit;
+
     const host = createPlayer(playerName, true, userId);
     this.room = createRoomData(
       roomCode, `${playerName} vs Bot`, host, 2, 2,
-      0, undefined, sequenceLength
+      turnTimeLimit, sequencesToWin, sequenceLength, seriesLength
     );
 
     this.wsToPlayer.set(ws, host.id);
@@ -493,6 +499,7 @@ export class RoomDO implements DurableObject {
     });
 
     if (this.room.gameState) {
+      this.sendTo(ws, { type: 'room-updated', data: toRoomInfo(this.room) });
       this.sendTo(ws, { type: 'game-started', data: toClientGameState(this.room.gameState, host.id) });
       await this.startTurnTimer();
       await this.scheduleBotTurnIfNeeded();
