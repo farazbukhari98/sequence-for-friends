@@ -74,11 +74,15 @@ export function useAuth(): UseAuthReturn {
           };
           setUser(profile);
           await saveUser(profile);
-        } catch {
-          // Token invalid - clear session
-          setApiToken(null);
-          await clearUser();
-          setUser(null);
+        } catch (refreshErr: any) {
+          // If refresh returns 401, the token is truly invalid — clear session
+          if (refreshErr?.status === 401) {
+            setApiToken(null);
+            await clearUser();
+            setUser(null);
+          }
+          // Otherwise (network error, timeout, etc.) keep the stored token —
+          // it may still be valid for WebSocket auth
         }
       } catch {
         // Storage error

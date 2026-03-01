@@ -148,6 +148,15 @@ export class RoomDO implements DurableObject {
     if (timers) {
       this.timers = timers;
     }
+    // Restore stats tracking fields that survive hibernation
+    const savedStartedAt = await this.state.storage.get<number>('gameStartedAt');
+    if (savedStartedAt) {
+      this.gameStartedAt = savedStartedAt;
+    }
+    const savedStats = await this.state.storage.get<[string, { turnsPlayed: number; cardsPlayed: number; twoEyedJacksUsed: number; oneEyedJacksUsed: number; deadCardsReplaced: number; sequencesMade: number }][]>('playerGameStats');
+    if (savedStats) {
+      this.playerGameStats = new Map(savedStats);
+    }
     this.loaded = true;
     this.restoreWebSocketMappings();
   }
@@ -177,6 +186,9 @@ export class RoomDO implements DurableObject {
       await this.state.storage.delete('room');
     }
     await this.state.storage.put('timers', this.timers);
+    // Persist stats tracking fields so they survive hibernation
+    await this.state.storage.put('gameStartedAt', this.gameStartedAt);
+    await this.state.storage.put('playerGameStats', Array.from(this.playerGameStats.entries()));
   }
 
   // ========== TIMER MANAGEMENT ==========
@@ -1262,14 +1274,23 @@ export class RoomDO implements DurableObject {
   }
 
   private async persistGameResults(winnerTeamIndex: number, wasStalemate: boolean): Promise<void> {
-    if (!this.room?.gameState) return;
+    if (!this.room?.gameState) {
+      console.log('[STATS] No room/gameState, skipping persist');
+      return;
+    }
 
     // Only persist if we have a D1 binding
-    if (!this.env.DB) return;
+    if (!this.env.DB) {
+      console.log('[STATS] No DB binding, skipping persist');
+      return;
+    }
 
     const gs = this.room.gameState;
     const now = Date.now();
     const durationMs = now - this.gameStartedAt;
+
+    console.log(`[STATS] persistGameResults called: winner=${winnerTeamIndex}, stalemate=${wasStalemate}, gameStartedAt=${this.gameStartedAt}, duration=${durationMs}ms`);
+    console.log(`[STATS] Players: ${this.room.players.map(p => `${p.name}(bot=${p.isBot},userId=${p.userId || 'NONE'})`).join(', ')}`);
 
     // Build game history record
     const gameId = crypto.randomUUID();
@@ -1316,12 +1337,18 @@ export class RoomDO implements DurableObject {
     }
 
     // Only persist if there's at least one authenticated human player
-    if (participants.length === 0) return;
+    if (participants.length === 0) {
+      console.log('[STATS] No authenticated participants, skipping persist');
+      return;
+    }
+
+    console.log(`[STATS] Persisting ${participants.length} participants to D1`);
 
     try {
       await insertGameHistory(this.env.DB, game, participants);
+      console.log(`[STATS] Successfully persisted game ${gameId}`);
     } catch (err) {
-      console.error('Failed to persist game results:', err);
+      console.error('[STATS] Failed to persist game results:', err);
     }
   }
 
