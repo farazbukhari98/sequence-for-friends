@@ -77,5 +77,6 @@ export function cutCard(deck: CardCode[]): CardCode {
   const arr = new Uint32Array(1);
   crypto.getRandomValues(arr);
   const index = arr[0] % deck.length;
-  return deck[index];
+  // Remove the card so no two players can cut the same card
+  return deck.splice(index, 1)[0];
 }

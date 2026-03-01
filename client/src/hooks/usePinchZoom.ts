@@ -32,6 +32,10 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
     translateY: 0,
   });
 
+  // Keep a ref in sync with transform state for stable callbacks
+  const transformRef = useRef(transform);
+  transformRef.current = transform;
+
   // Refs for tracking gesture state
   const gestureState = useRef({
     isPinching: false,
@@ -121,6 +125,7 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
   // Handle pointer down
   const handlePointerDown = useCallback((e: PointerEvent) => {
     const state = gestureState.current;
+    const t = transformRef.current;
 
     // Store pointer
     state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -130,20 +135,20 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
       state.isPinching = true;
       state.isDragging = false;
       state.startDistance = getDistance(state.pointers);
-      state.startScale = transform.scale;
+      state.startScale = t.scale;
 
       const midpoint = getMidpoint(state.pointers);
       state.startX = midpoint.x;
       state.startY = midpoint.y;
-      state.startTranslateX = transform.translateX;
-      state.startTranslateY = transform.translateY;
-    } else if (state.pointers.size === 1 && isZoomed) {
+      state.startTranslateX = t.translateX;
+      state.startTranslateY = t.translateY;
+    } else if (state.pointers.size === 1 && t.scale > 1.05) {
       // Start drag (only when zoomed)
       state.isDragging = true;
       state.startX = e.clientX;
       state.startY = e.clientY;
-      state.startTranslateX = transform.translateX;
-      state.startTranslateY = transform.translateY;
+      state.startTranslateX = t.translateX;
+      state.startTranslateY = t.translateY;
     }
 
     // Double-tap detection
@@ -152,7 +157,7 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
       resetTransform();
     }
     state.lastTapTime = now;
-  }, [transform, isZoomed, getDistance, getMidpoint, resetTransform]);
+  }, [getDistance, getMidpoint, resetTransform]);
 
   // Handle pointer move
   const handlePointerMove = useCallback((e: PointerEvent) => {
@@ -185,16 +190,17 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
       const dy = e.clientY - state.startY;
 
       applyTransform({
-        scale: transform.scale,
+        scale: transformRef.current.scale,
         translateX: state.startTranslateX + dx,
         translateY: state.startTranslateY + dy,
       });
     }
-  }, [transform.scale, getDistance, getMidpoint, applyTransform, minScale, maxScale]);
+  }, [getDistance, getMidpoint, applyTransform, minScale, maxScale]);
 
   // Handle pointer up
   const handlePointerUp = useCallback((e: PointerEvent) => {
     const state = gestureState.current;
+    const t = transformRef.current;
     state.pointers.delete(e.pointerId);
 
     if (state.pointers.size < 2) {
@@ -205,15 +211,15 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
     }
 
     // Reset to single pointer drag if still have one pointer and zoomed
-    if (state.pointers.size === 1 && isZoomed) {
+    if (state.pointers.size === 1 && t.scale > 1.05) {
       const [pointer] = state.pointers.values();
       state.isDragging = true;
       state.startX = pointer.x;
       state.startY = pointer.y;
-      state.startTranslateX = transform.translateX;
-      state.startTranslateY = transform.translateY;
+      state.startTranslateX = t.translateX;
+      state.startTranslateY = t.translateY;
     }
-  }, [transform, isZoomed]);
+  }, []);
 
   // Set up event listeners
   useEffect(() => {
@@ -231,7 +237,7 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
 
     // Prevent default touch behaviors
     const preventDefaultTouch = (e: TouchEvent) => {
-      if (gestureState.current.isPinching || (gestureState.current.isDragging && isZoomed)) {
+      if (gestureState.current.isPinching || (gestureState.current.isDragging && transformRef.current.scale > 1.05)) {
         e.preventDefault();
       }
     };
@@ -246,7 +252,7 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
       container.removeEventListener('pointerleave', handlePointerUp);
       container.removeEventListener('touchmove', preventDefaultTouch);
     };
-  }, [handlePointerDown, handlePointerMove, handlePointerUp, isZoomed]);
+  }, [handlePointerDown, handlePointerMove, handlePointerUp]);
 
   return {
     containerRef,

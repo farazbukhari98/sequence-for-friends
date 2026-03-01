@@ -1,0 +1,76 @@
+.auth-screen {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary, #050505);
+  padding: 24px;
+}
+
+.auth-content {
+  text-align: center;
+  max-width: 360px;
+  width: 100%;
+}
+
+.auth-logo {
+  margin-bottom: 48px;
+}
+
+.auth-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 16px 0 4px;
+}
+
+.auth-subtitle {
+  font-size: 1.1rem;
+  color: var(--text-muted, #888);
+  margin: 0;
+}
+
+.auth-actions {
+  margin-bottom: 32px;
+}
+
+.btn-apple-signin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 24px;
+  background: #fff;
+  color: #000;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-apple-signin:hover {
+  opacity: 0.9;
+}
+
+.btn-apple-signin:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.apple-logo {
+  flex-shrink: 0;
+}
+
+.auth-error {
+  color: #ef4444;
+  font-size: 0.875rem;
+  margin-top: 12px;
+}
+
+.auth-footer {
+  color: var(--text-muted, #666);
+  font-size: 0.875rem;
+}

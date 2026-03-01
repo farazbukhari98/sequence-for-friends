@@ -29,8 +29,10 @@ import {
   getActiveModes,
 } from './room-logic.js';
 
-import { applyMove } from './rules/engine.js';
+import { applyMove, checkStalemate } from './rules/engine.js';
 import { decideBotAction, getBotDelay } from './bot.js';
+import { insertGameHistory } from './db/queries.js';
+import type { DbGameHistory, DbGameParticipant } from './db/queries.js';
 
 // ============================================
 // TIMER TYPES FOR ALARM QUEUE
@@ -115,6 +117,19 @@ export class RoomDO implements DurableObject {
 
   // Timer queue (managed via alarm)
   private timers: TimerEntry[] = [];
+
+  // Per-player game stats accumulation
+  private playerGameStats = new Map<string, {
+    turnsPlayed: number;
+    cardsPlayed: number;
+    twoEyedJacksUsed: number;
+    oneEyedJacksUsed: number;
+    deadCardsReplaced: number;
+    sequencesMade: number;
+  }>();
+
+  // When current game started
+  private gameStartedAt: number = 0;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -211,10 +226,10 @@ export class RoomDO implements DurableObject {
       switch (timer.type) {
         case 'turn-timeout':
         case 'disconnect-skip':
-          this.handleTurnTimeout();
+          await this.handleTurnTimeout();
           break;
         case 'bot-turn':
-          this.executeBotTurn();
+          await this.executeBotTurn();
           break;
         case 'cleanup':
           await this.cleanupRoom();
@@ -244,12 +259,13 @@ export class RoomDO implements DurableObject {
     const action = request.headers.get('X-Action') || '';
     const reconnectPlayerId = request.headers.get('X-Player-Id') || '';
     const reconnectToken = request.headers.get('X-Player-Token') || '';
+    const userId = request.headers.get('X-User-Id') || '';
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
     // Accept the WebSocket with hibernation
-    this.state.acceptWebSocket(server, [action, roomCode, reconnectPlayerId, reconnectToken]);
+    this.state.acceptWebSocket(server, [action, roomCode, reconnectPlayerId, reconnectToken, userId]);
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -345,8 +361,9 @@ export class RoomDO implements DurableObject {
   }
 
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
-    // Treat errors like close
-    await this.webSocketClose(ws, 1006, 'error', false);
+    // No-op: the Hibernation API always fires webSocketClose after webSocketError.
+    // All cleanup happens in webSocketClose to avoid double-processing.
+    console.warn('WebSocket error:', error);
   }
 
   // ========== MESSAGE HANDLER ==========
@@ -379,11 +396,12 @@ export class RoomDO implements DurableObject {
   private async handleCreateRoom(ws: WebSocket, msg: ClientMessage & { type: 'create-room' }): Promise<void> {
     const { roomName, playerName, maxPlayers, teamCount, turnTimeLimit, sequencesToWin, sequenceLength, seriesLength } = msg.data;
 
-    // Get room code from tags
+    // Get room code and userId from tags
     const tags = this.state.getTags(ws);
     const roomCode = tags[1] || '';
+    const userId = tags[4] || undefined;
 
-    const host = createPlayer(playerName, true);
+    const host = createPlayer(playerName, true, userId);
     this.room = createRoomData(
       roomCode, roomName, host, maxPlayers, teamCount,
       turnTimeLimit ?? 0, sequencesToWin, sequenceLength, seriesLength
@@ -397,7 +415,7 @@ export class RoomDO implements DurableObject {
     await this.env.PLAYER_TOKENS.put(
       host.token,
       JSON.stringify({ roomCode, playerId: host.id }),
-      { expirationTtl: 86400 } // 24 hours
+      { expirationTtl: 7 * 86400 } // 7 days
     );
 
     this.sendResponse(ws, msg.id, {
@@ -414,8 +432,9 @@ export class RoomDO implements DurableObject {
     const { playerName, difficulty, sequenceLength } = msg.data;
     const tags = this.state.getTags(ws);
     const roomCode = tags[1] || '';
+    const userId = tags[4] || undefined;
 
-    const host = createPlayer(playerName, true);
+    const host = createPlayer(playerName, true, userId);
     this.room = createRoomData(
       roomCode, `${playerName} vs Bot`, host, 2, 2,
       0, undefined, sequenceLength
@@ -428,7 +447,7 @@ export class RoomDO implements DurableObject {
     await this.env.PLAYER_TOKENS.put(
       host.token,
       JSON.stringify({ roomCode, playerId: host.id }),
-      { expirationTtl: 86400 }
+      { expirationTtl: 7 * 86400 }
     );
 
     const botResult = addBotToRoom(this.room, difficulty);
@@ -442,6 +461,16 @@ export class RoomDO implements DurableObject {
     if ('error' in gameResult) {
       this.sendResponse(ws, msg.id, { success: false, error: gameResult.error });
       return;
+    }
+
+    // Initialize stats tracking (mirrors handleStartGame)
+    this.gameStartedAt = Date.now();
+    this.playerGameStats.clear();
+    for (const player of this.room.players) {
+      this.playerGameStats.set(player.id, {
+        turnsPlayed: 0, cardsPlayed: 0, twoEyedJacksUsed: 0,
+        oneEyedJacksUsed: 0, deadCardsReplaced: 0, sequencesMade: 0,
+      });
     }
 
     this.sendResponse(ws, msg.id, {
@@ -464,7 +493,9 @@ export class RoomDO implements DurableObject {
       return;
     }
 
-    const result = addPlayerToRoom(this.room, msg.data.playerName, msg.data.token);
+    const tags = this.state.getTags(ws);
+    const userId = tags[4] || undefined;
+    const result = addPlayerToRoom(this.room, msg.data.playerName, msg.data.token, userId);
     if ('error' in result) {
       this.sendResponse(ws, msg.id, { success: false, error: result.error });
       return;
@@ -478,7 +509,7 @@ export class RoomDO implements DurableObject {
     await this.env.PLAYER_TOKENS.put(
       player.token,
       JSON.stringify({ roomCode: this.room.code, playerId: player.id }),
-      { expirationTtl: 86400 }
+      { expirationTtl: 7 * 86400 }
     );
 
     this.sendResponse(ws, msg.id, {
@@ -531,8 +562,16 @@ export class RoomDO implements DurableObject {
     this.playerToWs.set(player.id, ws);
     ws.serializeAttachment({ playerId: player.id });
 
-    // Cancel cleanup timer
+    // Refresh KV token TTL on reconnect
+    await this.env.PLAYER_TOKENS.put(
+      player.token,
+      JSON.stringify({ roomCode: this.room.code, playerId: player.id }),
+      { expirationTtl: 7 * 86400 }
+    );
+
+    // Cancel cleanup and disconnect-skip timers
     await this.clearTimer('cleanup');
+    await this.clearTimer('disconnect-skip');
 
     const roomInfo = toRoomInfo(this.room);
     const gameState = this.room.gameState
@@ -592,6 +631,16 @@ export class RoomDO implements DurableObject {
     this.sendResponse(ws, msg.id, { success: true });
 
     if (this.room.gameState) {
+      // Initialize stats tracking
+      this.gameStartedAt = Date.now();
+      this.playerGameStats.clear();
+      for (const player of this.room.players) {
+        this.playerGameStats.set(player.id, {
+          turnsPlayed: 0, cardsPlayed: 0, twoEyedJacksUsed: 0,
+          oneEyedJacksUsed: 0, deadCardsReplaced: 0, sequencesMade: 0,
+        });
+      }
+
       // Send cut results to all
       this.broadcast({
         type: 'cut-result',
@@ -612,6 +661,8 @@ export class RoomDO implements DurableObject {
         }
       }
 
+      this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
+
       await this.startTurnTimer();
       await this.scheduleBotTurnIfNeeded();
     }
@@ -630,6 +681,9 @@ export class RoomDO implements DurableObject {
     this.sendResponse(ws, msg.id, result);
 
     if (result.success) {
+      // Track stats for the action
+      this.trackPlayerAction(playerId, msg.data);
+
       const turnChanged = this.room.gameState.currentPlayerIndex !== previousPlayerIndex;
 
       if (turnChanged && !result.gameOver) {
@@ -637,10 +691,17 @@ export class RoomDO implements DurableObject {
         await this.startTurnTimer();
       }
 
+      // Track new sequences
+      if (result.newSequences) {
+        const stats = this.playerGameStats.get(playerId);
+        if (stats) stats.sequencesMade += result.newSequences.length;
+      }
+
       this.broadcastGameState();
 
       if (result.gameOver && result.winnerTeamIndex !== undefined) {
         await this.clearAllTimers();
+        await this.persistGameResults(result.winnerTeamIndex, !!result.stalemate);
         this.broadcast({
           type: 'game-over',
           data: { winnerTeamIndex: result.winnerTeamIndex, stalemate: result.stalemate },
@@ -828,6 +889,9 @@ export class RoomDO implements DurableObject {
       return;
     }
 
+    // Clear any stale timers (bot-turn, turn-timeout) from the previous game
+    await this.clearAllTimers();
+
     const result = continueSeriesInRoom(this.room, playerId);
 
     if ('error' in result) {
@@ -841,6 +905,16 @@ export class RoomDO implements DurableObject {
     }
 
     this.sendResponse(ws, msg.id, { success: true });
+
+    // Re-initialize stats tracking for the new game in the series
+    this.gameStartedAt = Date.now();
+    this.playerGameStats.clear();
+    for (const player of this.room.players) {
+      this.playerGameStats.set(player.id, {
+        turnsPlayed: 0, cardsPlayed: 0, twoEyedJacksUsed: 0,
+        oneEyedJacksUsed: 0, deadCardsReplaced: 0, sequencesMade: 0,
+      });
+    }
 
     // Send new game state to each player
     for (const player of this.room.players) {
@@ -955,7 +1029,7 @@ export class RoomDO implements DurableObject {
     await this.scheduleTimer('turn-timeout', this.room.gameState.turnTimeLimit * 1000);
   }
 
-  private handleTurnTimeout(): void {
+  private async handleTurnTimeout(): Promise<void> {
     if (!this.room?.gameState || this.room.gameState.phase !== 'playing') return;
 
     const gameState = this.room.gameState;
@@ -963,11 +1037,47 @@ export class RoomDO implements DurableObject {
     const playerName = currentPlayer.name;
     const playerIndex = gameState.currentPlayerIndex;
 
-    // Skip turn
-    gameState.deadCardReplacedThisTurn = false;
+    // If player played a card but didn't draw, auto-draw so they don't lose a card
+    if (gameState.pendingDraw) {
+      const drawResult = applyMove(gameState, currentPlayer.id, { type: 'draw' });
+      if (drawResult.gameOver && drawResult.winnerTeamIndex !== undefined) {
+        // Stalemate detected on draw — end the game
+        this.timers = [];
+        await this.persistGameResults(drawResult.winnerTeamIndex, !!drawResult.stalemate);
+        this.broadcast({
+          type: 'game-over',
+          data: { winnerTeamIndex: drawResult.winnerTeamIndex, stalemate: drawResult.stalemate },
+        });
+        this.broadcast({ type: 'turn-timeout', data: { playerIndex, playerName } });
+        this.broadcastGameState();
+        return;
+      }
+      // applyMove('draw') already advanced currentPlayerIndex, so skip manual advance
+    } else {
+      // No pending draw — just advance turn manually
+      gameState.deadCardReplacedThisTurn = false;
+      gameState.lastRemovedCell = null;
+      gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+
+      // Check stalemate even when no card was played — the board may already
+      // be in stalemate from a previous move that wasn't checked
+      if (gameState.phase === 'playing') {
+        const stalemateResult = checkStalemate(gameState);
+        if (stalemateResult.isStalemate && stalemateResult.winnerTeamIndex !== undefined) {
+          this.timers = [];
+          await this.persistGameResults(stalemateResult.winnerTeamIndex, true);
+          this.broadcast({ type: 'turn-timeout', data: { playerIndex, playerName } });
+          this.broadcast({
+            type: 'game-over',
+            data: { winnerTeamIndex: stalemateResult.winnerTeamIndex, stalemate: stalemateResult },
+          });
+          this.broadcastGameState();
+          return;
+        }
+      }
+    }
+
     gameState.pendingDraw = false;
-    gameState.lastRemovedCell = null;
-    gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
     gameState.turnStartedAt = gameState.turnTimeLimit > 0 ? Date.now() : null;
 
     this.broadcast({ type: 'turn-timeout', data: { playerIndex, playerName } });
@@ -976,9 +1086,13 @@ export class RoomDO implements DurableObject {
     // Check if next player is disconnected
     const nextPlayer = gameState.players[gameState.currentPlayerIndex];
     if (!nextPlayer.connected && !nextPlayer.isBot) {
-      // Will schedule disconnect-skip in alarm
-      this.timers.push({ type: 'disconnect-skip', fireAt: Date.now() + 3000 });
-      this.timers.sort((a, b) => a.fireAt - b.fireAt);
+      // Only schedule disconnect-skip if at least one human is still connected,
+      // otherwise we'd loop forever skipping disconnected players
+      const hasConnectedHuman = gameState.players.some(p => p.connected && !p.isBot);
+      if (hasConnectedHuman) {
+        this.timers.push({ type: 'disconnect-skip', fireAt: Date.now() + 3000 });
+        this.timers.sort((a, b) => a.fireAt - b.fireAt);
+      }
     } else {
       // Start timer for next player
       if (gameState.turnTimeLimit > 0) {
@@ -1019,7 +1133,7 @@ export class RoomDO implements DurableObject {
     this.timers.sort((a, b) => a.fireAt - b.fireAt);
   }
 
-  private executeBotTurn(): void {
+  private async executeBotTurn(): Promise<void> {
     if (!this.room?.gameState || this.room.gameState.phase !== 'playing') return;
 
     const gameState = this.room.gameState;
@@ -1031,6 +1145,7 @@ export class RoomDO implements DurableObject {
 
     if (action.type === 'replace-dead') {
       applyMove(gameState, currentPlayer.id, action);
+      this.trackPlayerAction(currentPlayer.id, action);
       this.broadcastGameState();
       // Schedule next bot action
       this.timers.push({ type: 'bot-turn', fireAt: Date.now() + 400 });
@@ -1042,7 +1157,24 @@ export class RoomDO implements DurableObject {
       const previousPlayerIndex = gameState.currentPlayerIndex;
       const drawResult = applyMove(gameState, currentPlayer.id, action);
 
+      if (!drawResult.success) {
+        // Draw rejected (e.g. bot has no valid moves and no pending draw) — force-advance turn
+        gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+        gameState.turnStartedAt = gameState.turnTimeLimit > 0 ? Date.now() : null;
+        this.broadcastGameState();
+        this.scheduleBotTurnSync();
+        await this.saveState();
+        return;
+      }
+
       if (drawResult.success) {
+        // Track bot stats
+        this.trackPlayerAction(currentPlayer.id, action);
+        if (drawResult.newSequences) {
+          const stats = this.playerGameStats.get(currentPlayer.id);
+          if (stats) stats.sequencesMade += drawResult.newSequences.length;
+        }
+
         const turnChanged = gameState.currentPlayerIndex !== previousPlayerIndex;
         if (turnChanged && !drawResult.gameOver) {
           gameState.turnStartedAt = gameState.turnTimeLimit > 0 ? Date.now() : null;
@@ -1057,6 +1189,7 @@ export class RoomDO implements DurableObject {
 
         if (drawResult.gameOver && drawResult.winnerTeamIndex !== undefined) {
           this.timers = [];
+          await this.persistGameResults(drawResult.winnerTeamIndex, !!drawResult.stalemate);
           this.broadcast({
             type: 'game-over',
             data: { winnerTeamIndex: drawResult.winnerTeamIndex, stalemate: drawResult.stalemate },
@@ -1073,10 +1206,18 @@ export class RoomDO implements DurableObject {
     const playResult = applyMove(gameState, currentPlayer.id, action);
 
     if (playResult.success) {
+      // Track bot stats
+      this.trackPlayerAction(currentPlayer.id, action);
+      if (playResult.newSequences) {
+        const stats = this.playerGameStats.get(currentPlayer.id);
+        if (stats) stats.sequencesMade += playResult.newSequences.length;
+      }
+
       this.broadcastGameState();
 
       if (playResult.gameOver && playResult.winnerTeamIndex !== undefined) {
         this.timers = [];
+        await this.persistGameResults(playResult.winnerTeamIndex, !!playResult.stalemate);
         this.broadcast({
           type: 'game-over',
           data: { winnerTeamIndex: playResult.winnerTeamIndex, stalemate: playResult.stalemate },
@@ -1087,6 +1228,100 @@ export class RoomDO implements DurableObject {
       // Draw after a short delay
       this.timers.push({ type: 'bot-turn', fireAt: Date.now() + 400 });
       this.timers.sort((a, b) => a.fireAt - b.fireAt);
+    }
+  }
+
+  // ========== STATS TRACKING ==========
+
+  private trackPlayerAction(playerId: string, action: { type: string }): void {
+    const stats = this.playerGameStats.get(playerId);
+    if (!stats) return;
+
+    switch (action.type) {
+      case 'play-normal':
+        stats.cardsPlayed++;
+        stats.turnsPlayed++;
+        break;
+      case 'play-two-eyed':
+        stats.cardsPlayed++;
+        stats.twoEyedJacksUsed++;
+        stats.turnsPlayed++;
+        break;
+      case 'play-one-eyed':
+        stats.cardsPlayed++;
+        stats.oneEyedJacksUsed++;
+        stats.turnsPlayed++;
+        break;
+      case 'replace-dead':
+        stats.deadCardsReplaced++;
+        break;
+      case 'draw':
+        // Draw completes a turn
+        break;
+    }
+  }
+
+  private async persistGameResults(winnerTeamIndex: number, wasStalemate: boolean): Promise<void> {
+    if (!this.room?.gameState) return;
+
+    // Only persist if we have a D1 binding
+    if (!this.env.DB) return;
+
+    const gs = this.room.gameState;
+    const now = Date.now();
+    const durationMs = now - this.gameStartedAt;
+
+    // Build game history record
+    const gameId = crypto.randomUUID();
+    const game: DbGameHistory = {
+      id: gameId,
+      room_code: this.room.code,
+      started_at: this.gameStartedAt,
+      ended_at: now,
+      duration_ms: durationMs,
+      player_count: this.room.players.length,
+      team_count: gs.config.teamCount,
+      winning_team_idx: winnerTeamIndex,
+      was_stalemate: wasStalemate ? 1 : 0,
+      sequence_length: gs.config.sequenceLength,
+      sequences_to_win: gs.config.sequencesToWin,
+      is_series_game: this.room.seriesState ? 1 : 0,
+      series_id: null,
+    };
+
+    // Build participants - only for human players with userId
+    const participants: DbGameParticipant[] = [];
+    for (const player of this.room.players) {
+      if (player.isBot || !player.userId) continue;
+
+      const pStats = this.playerGameStats.get(player.id);
+      const won = player.teamIndex === winnerTeamIndex ? 1 : 0;
+      const wentFirst = player.id === gs.firstPlayerId ? 1 : 0;
+
+      participants.push({
+        game_id: gameId,
+        user_id: player.userId,
+        team_index: player.teamIndex,
+        team_color: player.teamColor,
+        seat_index: player.seatIndex,
+        won,
+        turns_taken: pStats?.turnsPlayed || 0,
+        cards_played: pStats?.cardsPlayed || 0,
+        two_eyed_used: pStats?.twoEyedJacksUsed || 0,
+        one_eyed_used: pStats?.oneEyedJacksUsed || 0,
+        dead_replaced: pStats?.deadCardsReplaced || 0,
+        sequences_made: pStats?.sequencesMade || 0,
+        went_first: wentFirst,
+      });
+    }
+
+    // Only persist if there's at least one authenticated human player
+    if (participants.length === 0) return;
+
+    try {
+      await insertGameHistory(this.env.DB, game, participants);
+    } catch (err) {
+      console.error('Failed to persist game results:', err);
     }
   }
 
@@ -1132,14 +1367,17 @@ export class RoomDO implements DurableObject {
   private broadcastGameState(): void {
     if (!this.room?.gameState) return;
 
-    for (const player of this.room.players) {
-      const playerWs = this.playerToWs.get(player.id);
-      if (playerWs) {
-        this.sendTo(playerWs, {
-          type: 'game-state-updated',
-          data: toClientGameState(this.room.gameState, player.id),
-        });
-      }
+    const sockets = this.state.getWebSockets();
+    for (const ws of sockets) {
+      const attachment = ws.deserializeAttachment() as { playerId?: string } | null;
+      const playerId = attachment?.playerId;
+      if (!playerId) continue;
+      const player = this.room.gameState.players.find(p => p.id === playerId);
+      if (!player) continue;
+      this.sendTo(ws, {
+        type: 'game-state-updated',
+        data: toClientGameState(this.room.gameState, playerId),
+      });
     }
   }
 

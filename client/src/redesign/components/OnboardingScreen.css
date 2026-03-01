@@ -1,0 +1,128 @@
+.onboarding-screen {
+  height: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: var(--bg-primary, #050505);
+  padding: 24px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.onboarding-content {
+  max-width: 400px;
+  width: 100%;
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+
+.onboarding-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  margin: 0 0 4px;
+}
+
+.onboarding-subtitle {
+  color: var(--text-muted, #888);
+  text-align: center;
+  margin: 0 0 24px;
+}
+
+.onboarding-form {
+  margin-top: 24px;
+}
+
+/* Avatar Picker Styles */
+.avatar-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.avatar-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-preview-emoji {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.avatar-section {
+  width: 100%;
+}
+
+.avatar-label {
+  display: block;
+  color: var(--text-secondary, #aaa);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.avatar-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.avatar-icon-btn {
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--bg-tertiary, #1a1a2e);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.avatar-icon-btn.active {
+  transform: scale(1.1);
+}
+
+.avatar-icon-btn:hover {
+  border-color: rgba(255,255,255,0.2);
+}
+
+.avatar-color-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 6px;
+}
+
+.avatar-color-btn {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s;
+}
+
+.avatar-color-btn.active {
+  border-color: #fff;
+  transform: scale(1.15);
+}
+
+.color-check {
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}

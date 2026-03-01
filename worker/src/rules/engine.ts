@@ -280,9 +280,9 @@ function canCompleteLineAsSequence(
     // Check if blocked by opponent's chip
     if (cell !== null && cell !== teamIndex) {
       if (isCellLocked(allLockedCells, row, col)) {
-        return false;
+        return false; // Locked opponent chip — can't complete this line
       }
-      return false;
+      continue; // Unlocked opponent chip — could be removed with one-eyed jack
     }
 
     if (lockedCells.has(key)) {
@@ -470,8 +470,10 @@ export function applyMove(
 
     const cardIndex = player.hand.indexOf(deadAction.card);
     player.hand.splice(cardIndex, 1);
-    player.discardPile.push(deadAction.card);
 
+    // Draw replacement BEFORE adding dead card to discard pile.
+    // This prevents reshuffling the dead card back into the deck
+    // and the player immediately drawing it again.
     if (gameState.deck.length === 0) {
       const discardPiles = gameState.players.map(p => [...p.discardPile]);
       gameState.players.forEach(p => p.discardPile = []);
@@ -482,6 +484,9 @@ export function applyMove(
     if (card) {
       player.hand.push(card);
     }
+
+    // Add dead card to discard AFTER drawing replacement
+    player.discardPile.push(deadAction.card);
 
     gameState.deadCardReplacedThisTurn = true;
 
@@ -533,19 +538,21 @@ export function applyMove(
     );
 
     if (newSequences.length > 0) {
-      const sequence = newSequences[0];
-      lockSequenceCells(gameState.lockedCells, sequence);
+      for (const sequence of newSequences) {
+        lockSequenceCells(gameState.lockedCells, sequence);
+        gameState.completedSequences.push(sequence);
+      }
 
-      const newCount = (gameState.sequencesCompleted.get(player.teamIndex) || 0) + 1;
+      const newCount = (gameState.sequencesCompleted.get(player.teamIndex) || 0) + newSequences.length;
       gameState.sequencesCompleted.set(player.teamIndex, newCount);
 
       const timestamps = gameState.sequenceTimestamps.get(player.teamIndex) || [];
-      timestamps.push(Date.now());
+      for (let i = 0; i < newSequences.length; i++) {
+        timestamps.push(Date.now());
+      }
       gameState.sequenceTimestamps.set(player.teamIndex, timestamps);
 
-      gameState.completedSequences.push(sequence);
-
-      result.newSequences = [sequence];
+      result.newSequences = newSequences;
 
       logEvent(gameState, createGameEvent('sequence-completed', player, {
         sequenceCount: newCount,

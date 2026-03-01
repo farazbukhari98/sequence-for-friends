@@ -25,9 +25,11 @@ import { createBotPlayer, generateBotName } from './bot.js';
  */
 export function generateRoomCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = new Uint8Array(5);
+  crypto.getRandomValues(bytes);
   let code = '';
   for (let i = 0; i < 5; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
+    code += chars[bytes[i] % chars.length];
   }
   return code;
 }
@@ -35,11 +37,12 @@ export function generateRoomCode(): string {
 /**
  * Create a player object
  */
-export function createPlayer(name: string, isHost: boolean = false): Player {
+export function createPlayer(name: string, isHost: boolean = false, userId?: string): Player {
   return {
     id: crypto.randomUUID(),
     name,
     token: crypto.randomUUID(),
+    userId,
     seatIndex: 0,
     teamIndex: 0,
     teamColor: 'blue',
@@ -191,7 +194,7 @@ export function createRoomData(
 /**
  * Add a player to the room
  */
-export function addPlayerToRoom(room: Room, playerName: string, token?: string): Player | { error: string } {
+export function addPlayerToRoom(room: Room, playerName: string, token?: string, userId?: string): Player | { error: string } {
   // Check for reconnection
   if (token) {
     const existingPlayer = room.players.find(p => p.token === token);
@@ -213,7 +216,7 @@ export function addPlayerToRoom(room: Room, playerName: string, token?: string):
     return { error: 'Name already taken in this room' };
   }
 
-  const player = createPlayer(playerName);
+  const player = createPlayer(playerName, false, userId);
   room.players.push(player);
   assignTeams(room.players, room.teamCount);
 
@@ -354,6 +357,10 @@ export function startGameInRoom(room: Room, hostId: string): GameState | { error
 export function continueSeriesInRoom(room: Room, hostId: string): GameState | { error: string } {
   if (room.hostId !== hostId) {
     return { error: 'Only the host can continue the series' };
+  }
+
+  if (room.phase !== 'in-game') {
+    return { error: 'Game not in progress' };
   }
 
   if (!room.seriesState) {

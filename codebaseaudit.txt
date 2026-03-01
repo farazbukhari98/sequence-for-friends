@@ -1,0 +1,291 @@
+Sequence for Friends — Full Codebase Audit Report
+                                                                                                                                                                                                           
+  Summary                                                     
+                                               
+  5 agents analyzed every file across game logic, WebSocket/networking, frontend UI, backend API/security, and iOS/notifications. The findings are organized by severity below, with duplicates across
+  agents merged.
+
+  Totals: 12 Critical, 20 High, 22 Medium, 18 Low
+
+  ---
+  CRITICAL (Game-Breaking / Data-Loss / Security)
+
+  1. Auto-Reconnect Goes to the Wrong Server Endpoint
+
+  Files: client/src/lib/websocket.ts:52-56, client/src/hooks/useSocket.ts:236-238
+
+  After a network drop mid-game, the auto-reconnect connects to /ws/room/:code (which triggers handleJoinRoom — creating a duplicate player) instead of /ws/reconnect?token=... (which correctly restores
+  the session). This is the root cause of most reconnection failures. Players get ghost duplicates or "Room not found" errors instead of seamlessly rejoining.
+
+  2. Session Cleared on Every App Mount — Reconnection Impossible on iOS
+
+  File: client/src/App.tsx:101-106
+
+  localStorage.removeItem(STORAGE_KEYS.roomCode);
+  localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.playerId);
+
+  This runs on every component mount. On iOS, backgrounding/foregrounding can remount the root component, wiping session credentials. The reconnect() function exists but is never called. Players
+  returning from a phone call lose their game permanently.
+
+  3. disconnect-skip Timer Not Cancelled on Reconnect
+
+  File: worker/src/room-do.ts:529-570
+
+  When a player reconnects, handleReconnect clears the cleanup timer but NOT the disconnect-skip timer. If the player reconnects within 3 seconds, their turn is still skipped by the stale timer. The game
+   state jumps unexpectedly.
+
+  4. Multiple Simultaneous Sequences Silently Dropped
+
+  File: worker/src/rules/engine.ts:535-558
+
+  applyMove only processes newSequences[0]. If a chip placement completes 2 sequences at once (at an intersection), only the first is counted. The second sequence's cells aren't locked, and the win check
+   adds 1 instead of 2. A double-sequence winning move won't end the game.
+
+  5. Bot Infinite Loop When All Cards Are Dead
+
+  File: worker/src/bot.ts:73-85, worker/src/room-do.ts:1084-1119
+
+  When all bot cards are dead and one has already been replaced this turn, the bot returns { type: 'draw' } but pendingDraw is false. applyMove rejects it, nothing is scheduled, and the game permanently
+  freezes. All players are stuck.
+
+  6. In-Memory Pending Registrations Lost Between Worker Isolates
+
+  File: worker/src/api.ts:42
+
+  const pendingRegistrations = new Map<...>(); // module-level, per-isolate
+
+  Cloudflare Workers don't share memory between isolates. Step 1 of registration (Apple auth → tempToken) may hit isolate A, but step 2 (complete-registration) hits isolate B, which has an empty Map. New
+   user registration is broken under any real traffic.
+
+  7. webSocketError Double-Processes Disconnects
+
+  File: worker/src/room-do.ts:363-366
+
+  The Hibernation API fires both webSocketError AND webSocketClose for non-clean disconnects. The error handler delegates to the close handler, so disconnect logic runs twice: double-broadcast of
+  player-disconnected, double-scheduling of disconnect-skip timers.
+
+  8. No Rate Limiting on Any Endpoint
+
+  File: worker/src/index.ts, worker/src/api.ts
+
+  Zero rate limiting anywhere. Attack vectors include: replaying Apple identity tokens, spamming friend requests (creating thousands of DB rows + notification spam), sending unlimited push notifications
+  via /api/invite, and exhausting room codes via /ws/create.
+
+  9. Push Notification Listener Accumulation — Memory Leak
+
+  File: client/src/hooks/usePush.ts:24-38
+
+  addListener() calls never cleaned up. Each re-mount stacks duplicate listeners. A single notification tap fires onInvite N times, causing multiple navigation attempts. Token registration also fires N
+  times per session.
+
+  10. Toast Component Has No CSS — Error Messages Are Invisible
+
+  File: client/src/components/Toast.tsx, client/src/main.tsx:4
+
+  main.tsx imports redesign/styles/global.css which has no .toast styles. The old styles/global.css with toast styles is never imported. All server errors, join failures, and game errors render as
+  invisible elements.
+
+  11. Non-Cryptographic Room Code Generation
+
+  File: worker/src/index.ts:18-25
+
+  Math.random() is predictable. With 32^5 = ~33M possible codes and no rate limiting, an attacker can enumerate active rooms to join uninvited. Should use crypto.getRandomValues().
+
+  12. Non-Host Players Stuck in WinnerModal When Host Disconnects (Series Mode)
+
+  File: client/src/redesign/components/GameScreen.tsx:783-795
+
+  During a series, non-host players see a countdown but no escape button. If the host disconnects, the countdown continues but no new game starts. There's no "Leave" button visible. Only escape is
+  force-quitting.
+
+  ---
+  HIGH (Significant Bugs / Security Issues)
+
+  13. Turn Timeout While pendingDraw=true Permanently Shrinks Hand
+
+  File: worker/src/room-do.ts:1008-1012
+
+  If a player plays a card (setting pendingDraw=true) then times out before drawing, pendingDraw is cleared without drawing. The player loses a card permanently — a major fairness issue.
+
+  14. KV Token TTL Is 24 Hours but Games Can Last Indefinitely
+
+  File: worker/src/room-do.ts:414-418
+
+  Player reconnection tokens expire after 24 hours (KV TTL). A long-running game with at least one connected player stays alive forever. After 24h, disconnected players see "Invalid token" and can never
+  rejoin.
+
+  15. Stalemate Detector Incorrectly Blocks Lines with Removable Opponent Chips
+
+  File: worker/src/rules/engine.ts:280-285
+
+  Dead code: both branches of the opponent-chip check return false. Lines with unlocked opponent chips (removable via one-eyed jack) are incorrectly treated as uncompleteable, causing premature stalemate
+   declarations.
+
+  16. Series Double-Counting if continue-series Sent Twice
+
+  File: worker/src/room-logic.ts:355-397
+
+  No guard against double-clicking. Two rapid continue-series messages increment the winner's count twice and double gamesPlayed. A team could win a series with fewer actual wins than required.
+
+  17. Broadcast Inconsistency: broadcast() vs broadcastGameState() Use Different Socket Sources
+
+  File: worker/src/room-do.ts:1261-1298
+
+  broadcast() uses state.getWebSockets() (hibernation-tracked), while broadcastGameState() uses the in-memory playerToWs Map. After hibernation, some players receive room-updated but NOT
+  game-state-updated, leaving their hand and board stale.
+
+  18. Auth State Change While on Profile/Friends = Blank Screen
+
+  File: client/src/App.tsx:88-99
+
+  The auth redirect only handles screen === 'auth' or 'onboarding'. If auth expires while viewing profile or friends, the screen stays but components fail — either blank screen (ProfileScreen) or
+  infinite 401 loop (FriendsScreen).
+
+  19. No JWT Revocation Mechanism
+
+  File: worker/src/auth.ts:215-254
+
+  30-day JWTs with no revocation. A stolen device/token gives full account access for a month. Sign-out only clears the APNs token — the session JWT remains valid.
+
+  20. Friend System: Blocked Check Only Works One Direction
+
+  File: worker/src/api.ts:417-449
+
+  If User B blocks User A, User A can still send friend requests to User B (only A-blocks-B is checked). Also, acceptFriendRequest doesn't verify the row is actually in pending state — an attacker can
+  create spurious friendships.
+
+  21. rejectFriendRequest Has Swapped Parameters and No State Guard
+
+  File: worker/src/db/queries.ts:366-370
+
+  Parameters are semantically inverted (works by accident). More critically, no AND status = 'pending' — this DELETE can remove accepted friendships.
+
+  22. wentFirst Statistic Is Always 0
+
+  File: worker/src/room-do.ts:1217-1218
+
+  Checks currentPlayerIndex === 0 at game end — but by then currentPlayerIndex reflects whoever's turn it was when the game ended, not who went first. The stat is completely wrong.
+
+  23. Confetti Positions Regenerate Every Second in WinnerModal
+
+  File: client/src/redesign/components/GameScreen.tsx:690-703
+
+  Math.random() positions are recalculated every render. The countdown timer triggers a re-render each second. Confetti pieces teleport randomly instead of animating smoothly.
+
+  24. usePinchZoom Re-registers Pointer Listeners on Every Gesture Frame
+
+  File: client/src/hooks/usePinchZoom.ts:122-249
+
+  transform and isZoomed in useCallback dependencies cause handler recreation during active gestures. Event listeners are removed and re-added multiple times per second, dropping frames on mid-range
+  devices.
+
+  25. Host Can Destroy Lobby With No Confirmation
+
+  File: client/src/redesign/components/LobbyScreen.tsx:205-207
+
+  Host clicking "Leave" instantly closes the room and kicks all players. No confirmation dialog. An accidental tap ruins the game for everyone.
+
+  26. OnboardingScreen: "Continue" Permanently Disabled if API Hangs
+
+  File: client/src/redesign/components/OnboardingScreen.tsx:22-34
+
+  If api.checkUsername never resolves (offline, slow connection), usernameStatus stays 'checking' forever, permanently disabling the submit button with no timeout.
+
+  27. APNs Stale Tokens Never Cleaned Up
+
+  File: worker/src/apns.ts:154
+
+  When APNs returns 410 (token invalid), the stale token should be deleted from the DB. Instead, all errors return false silently. Stale tokens accumulate, causing wasted push attempts.
+
+  28. Invite Endpoint Doesn't Verify Room Exists
+
+  File: worker/src/api.ts:536-582
+
+  POST /api/invite sends push notifications for any room code without checking if the room is actually alive. Friends get invited to nonexistent rooms.
+
+  29. Search Results Show Users Already Friends — Allows Duplicate Requests
+
+  File: client/src/redesign/components/FriendsScreen.tsx:86-106
+
+  Search results show all users with "Add" buttons regardless of existing friendship status. Users can send duplicate friend requests with no feedback.
+
+  30. urlRoomCode Never Cleared After Backing Out of Join
+
+  File: client/src/redesign/components/HomeScreen.tsx:100-107
+
+  After backing out of a join flow, the old room code persists in state. Later clicking "Join Game" re-triggers the invite banner with the stale code.
+
+  31. APNs Always Uses Production Endpoint — Breaks Dev Testing
+
+  File: worker/src/apns.ts:154
+
+  No sandbox/production switching. Development provisioning profiles require api.sandbox.push.apple.com. Push notifications silently fail during development.
+
+  32. AppDelegate Calls registerForRemoteNotifications Before Permission Granted
+
+  File: client/ios/App/App/AppDelegate.swift:11
+
+  Called unconditionally at launch before user grants permission. This is an App Store review red flag per Apple's docs.
+
+  ---
+  MEDIUM (20+ issues — abbreviated)
+
+  ┌─────┬─────────┬─────────────────────────────────────────────────────────────────────────────────────────────┐
+  │  #  │  Area   │                                            Issue                                            │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 33  │ Timer   │ handleTurnTimeout doesn't check for stalemate — game runs forever if all players timeout    │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 34  │ Timer   │ Infinite disconnect-skip chain with all-disconnected players consumes DO compute for 30 min │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 35  │ Series  │ Old bot-turn timer fires on new series game before clients receive new state                │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 36  │ Deck    │ Just-discarded dead card included in reshuffle — player can draw same dead card back        │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 37  │ API     │ Avatar fields stored without validation — arbitrary strings up to unlimited length          │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 38  │ API     │ roomCode and friendId not validated in invite handler                                       │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 39  │ API     │ offset parameter unbounded — can trigger expensive full table scans                         │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 40  │ API     │ Game invites never expired/cleaned — game_invites table grows unbounded                     │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 41  │ CORS    │ Access-Control-Allow-Origin: * on all endpoints                                             │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 42  │ CSS     │ .text-muted utility class doesn't exist — loading states have wrong text color              │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 43  │ CSS     │ .logo-chips and .chip classes never defined — decorative elements invisible                 │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 44  │ CSS     │ StatsSummary.css uses :has() — fails on older Android WebViews                              │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 45  │ Friends │ No real-time updates — friends list goes stale immediately                                  │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 46  │ Friends │ Errors from useFriends hook never displayed to user                                         │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 47  │ Friends │ Accept/reject silently swallows errors                                                      │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 48  │ Friends │ No confirmation before removing a friend                                                    │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 49  │ Push    │ No foreground notification listener — in-app invites are invisible                          │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 50  │ Push    │ Cold-launch from notification tap fails if auth hasn't loaded yet                           │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 51  │ iOS     │ /invite/* path in AASA but no matching route exists — 404                                   │
+  ├─────┼─────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 52  │ iOS     │ Capacitor Keyboard plugin configured but not installed                                      │
+  └─────┴─────────┴─────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  ---
+  LOW (18 issues — key highlights)
+
+  - wentFirst and turnsPlayed stats are both wrong/redundant
+  - Bot plays dead card out of order (rules violation)
+  - Cut card allows same card for multiple players
+  - Team count ignores room setting for 3 players
+  - endSeriesInRoom uses index-0 tie-break with no notification
+  - Reconnect attempts cap at 10 with no user feedback when exhausted
+  - send() silently drops messages when disconnected
+  - Legacy duplicate component files in client/src/components/
+  - useProfile fetches game history that's never displayed (dead code)
+  - Various any type casts defeating TypeScript safety
+  - patch-capacitor-plugins.sh uses macOS-only sed -i ''

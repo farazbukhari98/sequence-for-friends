@@ -116,6 +116,7 @@ export function initializeGame(
     turnStartedAt: turnTimeLimit > 0 ? Date.now() : null,
     sequenceTimestamps: new Map(),
     eventLog: [],
+    firstPlayerId: players[currentPlayerIndex]?.id || null,
   };
 }
 

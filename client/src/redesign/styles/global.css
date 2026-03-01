@@ -281,6 +281,7 @@ input::placeholder {
 .gap-lg { gap: var(--space-lg); }
 .w-full { width: 100%; }
 .text-center { text-align: center; }
+.text-muted { color: var(--text-muted); }
 
 .mt-sm { margin-top: var(--space-sm); }
 .mt-md { margin-top: var(--space-md); }
@@ -307,6 +308,42 @@ input::placeholder {
 }
 
 .animate-fade-in { animation: fadeIn 0.4s var(--transition-smooth); }
+
+/* Toast / Snackbar */
+.toast {
+  position: fixed;
+  bottom: calc(var(--safe-area-bottom) + 100px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  animation: toastSlideUp 0.3s ease;
+}
+
+.toast.error {
+  background: var(--accent-danger);
+  color: white;
+}
+
+.toast.success {
+  background: var(--accent-secondary);
+  color: white;
+}
+
+@keyframes toastSlideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
 
 /* Mobile overrides */
 @media (max-width: 480px) {

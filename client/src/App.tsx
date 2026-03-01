@@ -2,13 +2,19 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { useSocket } from './hooks/useSocket';
+import { useAuth } from './hooks/useAuth';
+import { usePush } from './hooks/usePush';
+import { AuthScreen } from './redesign/components/AuthScreen';
+import { OnboardingScreen } from './redesign/components/OnboardingScreen';
 import { HomeScreen } from './redesign/components/HomeScreen';
 import { LobbyScreen } from './redesign/components/LobbyScreen';
 import { GameScreen } from './redesign/components/GameScreen';
+import { ProfileScreen } from './redesign/components/ProfileScreen';
+import { FriendsScreen } from './redesign/components/FriendsScreen';
 import { Toast } from './components/Toast';
 import type { TurnTimeLimit, SequencesToWin, BotDifficulty, SequenceLength } from '../../shared/types';
 
-type Screen = 'home' | 'lobby' | 'game';
+type Screen = 'auth' | 'onboarding' | 'home' | 'profile' | 'friends' | 'lobby' | 'game';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -24,11 +30,27 @@ function getRoomCodeFromURL(): string | null {
 }
 
 function App() {
-  const [screen, setScreen] = useState<Screen>('home');
+  const [screen, setScreen] = useState<Screen>('auth');
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [urlRoomCode, setUrlRoomCode] = useState<string | null>(getRoomCodeFromURL);
   const [showReconnectOverlay, setShowReconnectOverlay] = useState(false);
   const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Onboarding state
+  const [onboardingTempToken, setOnboardingTempToken] = useState<string | null>(null);
+  const [onboardingSuggestedName, setOnboardingSuggestedName] = useState<string | undefined>();
+
+  // Auth
+  const { user, loading: authLoading, isAuthenticated, signIn, completeRegistration, signOut, updateUser } = useAuth();
+
+  // Push notifications
+  usePush({
+    isAuthenticated,
+    onInvite: (roomCode) => {
+      setUrlRoomCode(roomCode);
+      setScreen('home');
+    },
+  });
 
   const {
     connected,
@@ -62,12 +84,53 @@ function App() {
     clearRoomClosed,
   } = useSocket();
 
-  // Always start fresh on app open — clear any stale session
+  // Set initial screen based on auth state
   useEffect(() => {
-    localStorage.removeItem(STORAGE_KEYS.roomCode);
-    localStorage.removeItem(STORAGE_KEYS.token);
-    localStorage.removeItem(STORAGE_KEYS.playerId);
-  }, []);
+    if (authLoading) return;
+    if (isAuthenticated) {
+      if (screen === 'auth' || screen === 'onboarding') {
+        setScreen('home');
+      }
+    } else {
+      setScreen('auth');
+    }
+  }, [authLoading, isAuthenticated]);
+
+  // On mount, try to restore an existing session instead of clearing it.
+  // If credentials exist and user is authenticated, attempt reconnection.
+  // Session is cleared explicitly on room-closed or intentional leave.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      // Not authenticated — clear any stale session
+      localStorage.removeItem(STORAGE_KEYS.roomCode);
+      localStorage.removeItem(STORAGE_KEYS.token);
+      localStorage.removeItem(STORAGE_KEYS.playerId);
+      return;
+    }
+
+    const savedRoom = localStorage.getItem(STORAGE_KEYS.roomCode);
+    const savedToken = localStorage.getItem(STORAGE_KEYS.token);
+    const savedPlayerId = localStorage.getItem(STORAGE_KEYS.playerId);
+
+    if (savedRoom && savedToken && savedPlayerId) {
+      setPlayerId(savedPlayerId);
+      reconnect(savedRoom, savedToken).then((result) => {
+        if ('error' in result) {
+          // Reconnect failed — stale session, clear it
+          clearSession();
+        } else {
+          setPlayerId(result.playerId);
+          // Navigate to the correct screen based on game state
+          if (result.gameState && result.gameState.phase === 'playing') {
+            setScreen('game');
+          } else {
+            setScreen('lobby');
+          }
+        }
+      });
+    }
+  }, [authLoading, isAuthenticated]);
 
   // Listen for deep links (Universal Links / App Links)
   useEffect(() => {
@@ -82,7 +145,7 @@ function App() {
           if (joinMatch) {
             const code = joinMatch[1].toUpperCase();
             setUrlRoomCode(code);
-            setScreen('home');
+            if (isAuthenticated) setScreen('home');
           }
           return;
         }
@@ -92,13 +155,13 @@ function App() {
         if (joinMatch) {
           const code = joinMatch[1].toUpperCase();
           setUrlRoomCode(code);
-          setScreen('home');
+          if (isAuthenticated) setScreen('home');
           return;
         }
         const roomParam = url.searchParams.get('room') || url.searchParams.get('code');
         if (roomParam) {
           setUrlRoomCode(roomParam.toUpperCase());
-          setScreen('home');
+          if (isAuthenticated) setScreen('home');
         }
       } catch {
         // Invalid URL, ignore
@@ -108,7 +171,7 @@ function App() {
     return () => {
       listener.then(l => l.remove());
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // Update screen based on game state
   useEffect(() => {
@@ -142,9 +205,10 @@ function App() {
     setPlayerId(null);
   };
 
-  // Handle creating a room
+  // Handle creating a room (uses display name from user profile)
   const handleCreateRoom = async (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit: TurnTimeLimit, sequencesToWin: SequencesToWin) => {
-    const result = await createRoom(roomName, playerName, maxPlayers, teamCount, turnTimeLimit, sequencesToWin);
+    const name = user?.displayName || playerName;
+    const result = await createRoom(roomName, name, maxPlayers, teamCount, turnTimeLimit, sequencesToWin);
     if ('error' in result) {
       return result;
     }
@@ -155,29 +219,36 @@ function App() {
 
   // Handle creating a bot game
   const handleCreateBotGame = async (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength) => {
-    const result = await createBotGame(playerName, difficulty, sequenceLength);
+    const name = user?.displayName || playerName;
+    const result = await createBotGame(name, difficulty, sequenceLength);
     if ('error' in result) {
       return result;
     }
     saveSession(result.roomCode, result.token, result.playerId);
-    setScreen('game'); // Skip lobby, go directly to game
+    setScreen('game');
     return result;
   };
 
   // Handle joining a room
   const handleJoinRoom = async (roomCode: string, playerName: string) => {
-    const result = await joinRoom(roomCode, playerName);
+    const name = user?.displayName || playerName;
+    const result = await joinRoom(roomCode, name);
     if ('error' in result) {
       return result;
     }
     saveSession(roomCode.toUpperCase(), result.token, result.playerId);
-    // Clear URL param after successful join
     if (urlRoomCode) {
       window.history.replaceState({}, '', window.location.pathname);
     }
     setScreen('lobby');
     return result;
   };
+
+  // Clear URL room code (e.g., when user backs out of join screen)
+  const handleClearUrlRoomCode = useCallback(() => {
+    setUrlRoomCode(null);
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
 
   // Handle leaving a room
   const handleLeaveRoom = () => {
@@ -191,9 +262,7 @@ function App() {
     setScreen('lobby');
   }, []);
 
-  // Auto-transition from game to lobby when room phase changes FROM 'in-game'
-  // TO 'waiting' (e.g., when end-series is called). Skip if series was just
-  // won so the WinnerModal can display the "Series Complete" state first.
+  // Auto-transition from game to lobby when room phase changes
   const prevRoomPhaseRef = useRef(roomInfo?.phase);
   useEffect(() => {
     const prevPhase = prevRoomPhaseRef.current;
@@ -208,9 +277,9 @@ function App() {
     }
   }, [roomInfo]);
 
-  // Delay showing reconnect overlay to prevent flashing on brief disconnects
+  // Delay showing reconnect overlay
   useEffect(() => {
-    if (!connected && screen !== 'home') {
+    if (!connected && screen !== 'home' && screen !== 'auth' && screen !== 'onboarding' && screen !== 'profile' && screen !== 'friends') {
       overlayTimerRef.current = setTimeout(() => {
         setShowReconnectOverlay(true);
       }, 1500);
@@ -237,6 +306,46 @@ function App() {
     return result;
   };
 
+  // Auth handlers
+  const handleSignIn = async () => {
+    return signIn();
+  };
+
+  const handleNeedsUsername = (tempToken: string, suggestedName?: string) => {
+    setOnboardingTempToken(tempToken);
+    setOnboardingSuggestedName(suggestedName);
+    setScreen('onboarding');
+  };
+
+  const handleCompleteRegistration = async (username: string, displayName: string, avatarId: string, avatarColor: string) => {
+    if (!onboardingTempToken) return { error: 'Missing registration token' };
+    const result = await completeRegistration(onboardingTempToken, username, displayName, avatarId, avatarColor);
+    if (!result.error) {
+      setScreen('home');
+    }
+    return result;
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    clearSession();
+    setScreen('auth');
+  };
+
+  // Loading state
+  if (authLoading) {
+    return (
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#050505' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="logo-icon" style={{ margin: '0 auto 12px' }}>
+            <span className="logo-s" style={{ fontSize: '2rem', color: '#fff' }}>S</span>
+          </div>
+          <p style={{ color: '#888' }}>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {showReconnectOverlay && (
@@ -260,12 +369,45 @@ function App() {
         </div>
       )}
 
+      {screen === 'auth' && (
+        <AuthScreen
+          onSignIn={handleSignIn}
+          onNeedsUsername={handleNeedsUsername}
+        />
+      )}
+
+      {screen === 'onboarding' && (
+        <OnboardingScreen
+          suggestedName={onboardingSuggestedName}
+          onComplete={handleCompleteRegistration}
+        />
+      )}
+
       {screen === 'home' && (
         <HomeScreen
           onCreateRoom={handleCreateRoom}
           onCreateBotGame={handleCreateBotGame}
           onJoinRoom={handleJoinRoom}
           initialRoomCode={urlRoomCode || undefined}
+          onClearRoomCode={handleClearUrlRoomCode}
+          user={user || undefined}
+          onProfilePress={() => setScreen('profile')}
+          onFriendsPress={() => setScreen('friends')}
+        />
+      )}
+
+      {screen === 'profile' && user && (
+        <ProfileScreen
+          user={user}
+          onBack={() => setScreen('home')}
+          onSignOut={handleSignOut}
+          onUpdateUser={updateUser}
+        />
+      )}
+
+      {screen === 'friends' && (
+        <FriendsScreen
+          onBack={() => setScreen('home')}
         />
       )}
 
@@ -286,6 +428,7 @@ function App() {
           onRespondTeamSwitch={respondTeamSwitch}
           onClearTeamSwitchRequest={clearTeamSwitchRequest}
           onClearGameModeInfo={clearGameModeInfo}
+          isAuthenticated={isAuthenticated}
         />
       )}
 

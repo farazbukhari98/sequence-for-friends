@@ -17,3 +17,22 @@ new_classes = ["RoomDO"]
 binding = "PLAYER_TOKENS"
 id = "cb6bc834fe334f40b9e6c977681aee5e"
 preview_id = "55f0b7a8610f48c1a255e073d1becb07"
+
+[[kv_namespaces]]
+binding = "APPLE_JWKS"
+id = "c624c4736e8a4d258c7a5c989fbc97e4"
+preview_id = "0f52725627654e0c8e061b15fc535539"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sequence-db"
+database_id = "933724c1-95ba-4d39-bcff-98ae9372c7c7"
+
+[vars]
+APNS_SANDBOX = "false"
+
+# Secrets (set via `wrangler secret put`):
+# AUTH_SECRET - HMAC key for session JWTs
+# APNS_KEY - Contents of AuthKey_D3G682YA9U.p8
+# APNS_KEY_ID - D3G682YA9U
+# APNS_TEAM_ID - 469Q8Z675Y

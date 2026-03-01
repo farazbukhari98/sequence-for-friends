@@ -1,6 +1,8 @@
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MessageHandler = (data: any) => void;
 
 interface PendingRequest {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   resolve: (data: any) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
@@ -34,6 +36,8 @@ export class SequenceWebSocket {
   onError: ((error: Event) => void) | null = null;
   /** Called when auto-reconnect succeeds (not on initial connect) */
   onReconnect: (() => void) | null = null;
+  /** Called when all reconnect attempts are exhausted */
+  onReconnectFailed: (() => void) | null = null;
 
   constructor(url: string) {
     this.url = url;
@@ -103,6 +107,7 @@ export class SequenceWebSocket {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private handleMessage(msg: any): void {
     // Handle response to request()
     if (msg.type === 'response' && msg.id) {
@@ -126,7 +131,10 @@ export class SequenceWebSocket {
 
   private scheduleReconnect(): void {
     if (this.intentionalClose) return;
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) return;
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      this.onReconnectFailed?.();
+      return;
+    }
 
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
     this.reconnectAttempts++;
@@ -164,6 +172,7 @@ export class SequenceWebSocket {
   /**
    * Send a request and wait for a correlated response
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   request<T = any>(type: string, data?: unknown, timeoutMs = 10000): Promise<T> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {

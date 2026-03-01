@@ -1,0 +1,67 @@
+.stats-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+/* Fallback for browsers without :has() support (older Android WebViews) */
+.stats-row.stats-row-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* Modern browsers: auto-detect via :has() */
+@supports selector(:has(*)) {
+  .stats-row:has(.stat-sm) {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.stat-card {
+  background: var(--bg-tertiary, #1a1a2e);
+  border-radius: 12px;
+  padding: 12px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-card.stat-highlight {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(99, 102, 241, 0.05));
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.stat-card.stat-sm .stat-value {
+  font-size: 1rem;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stats-section {
+  margin-top: 4px;
+}
+
+.stats-section-title {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #aaa);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 8px;
+}

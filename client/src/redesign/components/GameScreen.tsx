@@ -514,17 +514,24 @@ interface SequenceCelebrationModalProps {
 }
 
 function SequenceCelebrationModal({ teamColor, playerNames, sequenceLength, onDismiss }: SequenceCelebrationModalProps) {
+  const confettiPieces = useMemo(() =>
+    Array.from({ length: 30 }).map(() => ({
+      left: `${Math.random() * 100}%`,
+      delay: `${Math.random() * 0.5}s`,
+    })), []
+  );
+
   return (
     <div className="modal-overlay celebration-overlay" onClick={onDismiss}>
       <div className="modal-content sequence-celebration-modal" onClick={(e) => e.stopPropagation()}>
         <div className="confetti-container">
-          {Array.from({ length: 30 }).map((_, i) => (
+          {confettiPieces.map((piece, i) => (
             <div
               key={i}
               className="confetti"
               style={{
-                left: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 0.5}s`,
+                left: piece.left,
+                animationDelay: piece.delay,
                 backgroundColor: i % 3 === 0 ? getTeamColorHex(teamColor) : i % 3 === 1 ? '#FFD700' : '#ffffff',
               }}
             />
@@ -652,6 +659,14 @@ function WinnerModal({
   const winnerColor = teamColors[winnerTeamIndex];
   const winningPlayers = players.filter(p => p.teamIndex === winnerTeamIndex);
 
+  const confettiPieces = useMemo(() =>
+    Array.from({ length: 50 }).map(() => ({
+      left: `${Math.random() * 100}%`,
+      delay: `${Math.random() * 1}s`,
+      duration: `${2 + Math.random() * 2}s`,
+    })), []
+  );
+
   const isSeries = seriesState !== null;
   const isSeriesOver = seriesState?.seriesWinnerTeamIndex != null;
 
@@ -688,14 +703,14 @@ function WinnerModal({
   return (
     <div className="modal-overlay winner-overlay">
       <div className="confetti-container winner-confetti">
-        {Array.from({ length: 50 }).map((_, i) => (
+        {confettiPieces.map((piece, i) => (
           <div
             key={i}
             className="confetti winner-confetti-piece"
             style={{
-              left: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 1}s`,
-              animationDuration: `${2 + Math.random() * 2}s`,
+              left: piece.left,
+              animationDelay: piece.delay,
+              animationDuration: piece.duration,
               backgroundColor: i % 4 === 0 ? getTeamColorHex(winnerColor) : i % 4 === 1 ? '#FFD700' : i % 4 === 2 ? '#ffffff' : '#FF69B4',
             }}
           />
@@ -790,6 +805,11 @@ function WinnerModal({
               {isHost && !loading && (
                 <button className="btn btn-secondary winner-btn" onClick={handleEndSeries} style={{ marginTop: '0.5rem' }}>
                   End Series Now
+                </button>
+              )}
+              {!isHost && (
+                <button className="btn btn-secondary winner-btn" onClick={onLeave} style={{ marginTop: '0.5rem' }}>
+                  Leave Series
                 </button>
               )}
             </>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { SequenceWebSocket } from '../lib/websocket';
+import { getApiToken } from '../lib/api';
 import type {
   RoomInfo,
   ClientGameState,
@@ -85,7 +86,13 @@ function getBaseUrl(): string {
 }
 
 function wsUrl(path: string): string {
-  return `${getBaseUrl()}${path}`;
+  const base = `${getBaseUrl()}${path}`;
+  const token = getApiToken();
+  if (token) {
+    const separator = base.includes('?') ? '&' : '?';
+    return `${base}${separator}auth=${encodeURIComponent(token)}`;
+  }
+  return base;
 }
 
 // ============================================
@@ -139,25 +146,15 @@ export function useSocket(): UseSocketReturn {
       }
     };
 
-    // Re-authenticate after auto-reconnect
+    // After auto-reconnect, the server's /ws/reconnect handler (triggered by the
+    // reconnect URL) automatically restores the player to the room and sends back
+    // room-updated / game-state-updated broadcasts. No client-side message needed.
     ws.onReconnect = () => {
-      console.log('WebSocket reconnected, re-authenticating...');
-      if (tokenRef.current && roomCodeRef.current) {
-        ws.request('reconnect-to-room', {
-          roomCode: roomCodeRef.current,
-          token: tokenRef.current,
-        }).then((response: any) => {
-          if (response.success) {
-            if (response.roomInfo) setRoomInfo(response.roomInfo);
-            if (response.gameState) setGameState(response.gameState);
-            console.log('Re-authentication successful');
-          } else {
-            console.error('Re-authentication failed:', response.error);
-          }
-        }).catch((err) => {
-          console.error('Re-authentication request failed:', err);
-        });
-      }
+      console.log('WebSocket auto-reconnected via /ws/reconnect endpoint');
+    };
+
+    ws.onReconnectFailed = () => {
+      setError('Lost connection to server. Please refresh to rejoin.');
     };
 
     // Register broadcast event handlers
@@ -227,7 +224,7 @@ export function useSocket(): UseSocketReturn {
     tokenRef.current = token;
     roomCodeRef.current = roomCode;
     // Set reconnect URL to the room-specific endpoint (not /ws/create)
-    wsRef.current?.setReconnectUrl(wsUrl(`/ws/room/${roomCode}`));
+    wsRef.current?.setReconnectUrl(wsUrl(`/ws/reconnect?token=${encodeURIComponent(token)}`));
   }, []);
 
   // Cleanup on unmount
