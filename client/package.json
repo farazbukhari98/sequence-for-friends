@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "postinstall": "bash scripts/patch-capacitor-plugins.sh"
+    "postinstall": "bash scripts/patch-capacitor-plugins.sh",
+    "cap": "npx cap",
+    "cap:sync": "npx cap sync && bash scripts/patch-capacitor-plugins.sh",
+    "cap:sync:ios": "npx cap sync ios && bash scripts/patch-capacitor-plugins.sh"
   },
   "dependencies": {
     "@capacitor/app": "^8.0.1",

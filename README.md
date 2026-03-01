@@ -160,6 +160,35 @@ SequenceForFriends/
 ### Overlap Rule
 In 2-sequence mode, your second sequence can share **at most 1 chip** from your first sequence (corners don't count toward this limit).
 
+## iOS Development
+
+The iOS app is built with Capacitor. When syncing native plugins, **always use the wrapper scripts** instead of `npx cap sync` directly:
+
+```bash
+cd client
+npm run cap:sync        # Sync all platforms
+npm run cap:sync:ios    # Sync iOS only
+```
+
+**Why:** `npx cap sync` regenerates `capacitor.config.json` and strips out custom native plugin registrations (like `SignInWithApplePlugin`). The wrapper scripts run a patch afterward to re-add them.
+
+### Building for TestFlight
+
+```bash
+cd client
+npm run build                                    # Build web assets
+npm run cap:sync:ios                             # Sync to iOS (with patch)
+cd ios/App
+agvtool new-version -all <next_build_number>     # Bump build number
+xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+  -archivePath /tmp/SequenceForFriends.xcarchive archive \
+  DEVELOPMENT_TEAM=469Q8Z675Y CODE_SIGN_STYLE=Automatic \
+  -allowProvisioningUpdates -destination "generic/platform=iOS"
+xcodebuild -exportArchive -archivePath /tmp/SequenceForFriends.xcarchive \
+  -exportPath /tmp/SequenceForFriendsExport \
+  -exportOptionsPlist ../../ExportOptions.plist -allowProvisioningUpdates
+```
+
 ## Known Limitations
 
 - No spectator mode (yet)
