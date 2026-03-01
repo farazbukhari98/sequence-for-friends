@@ -75,7 +75,7 @@ export function findCardPositions(card: CardCode): [number, number][] {
 // BOT TYPES
 // ============================================
 
-export type BotDifficulty = 'easy' | 'medium' | 'hard';
+export type BotDifficulty = 'easy' | 'medium' | 'hard' | 'impossible';
 
 // Bot names are defined in server/src/bot.ts to avoid stale compiled JS issues
 
@@ -92,6 +92,7 @@ export interface Player {
   id: string;
   name: string;
   token: string; // For reconnection
+  userId?: string; // Authenticated user ID (from D1)
   seatIndex: number;
   teamIndex: number;
   teamColor: TeamColor;
@@ -314,6 +315,9 @@ export interface GameState {
 
   // Activity log
   eventLog: GameEvent[];
+
+  // Track who went first (for stats)
+  firstPlayerId: string | null;
 }
 
 // ============================================
@@ -591,4 +595,58 @@ export function cellKey(row: number, col: number): string {
 export function parseCell(key: string): [number, number] {
   const [row, col] = key.split(',').map(Number);
   return [row, col];
+}
+
+// ============================================
+// USER PROFILE & AUTH TYPES
+// ============================================
+
+export interface UserProfile {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarId: string;
+  avatarColor: string;
+  createdAt?: number;
+}
+
+export interface UserStats {
+  gamesPlayed: number;
+  gamesWon: number;
+  gamesLost: number;
+  winRate: number;
+  sequencesCompleted: number;
+  currentWinStreak: number;
+  longestWinStreak: number;
+  gamesByTeamColor: Record<string, number>;
+  cardsPlayed: number;
+  twoEyedJacksUsed: number;
+  oneEyedJacksUsed: number;
+  deadCardsReplaced: number;
+  totalTurnsTaken: number;
+  firstMoveGames: number;
+  firstMoveWins: number;
+  seriesPlayed: number;
+  seriesWon: number;
+  seriesLost: number;
+  totalPlayTimeMs: number;
+  fastestWinMs: number | null;
+}
+
+export interface FriendInfo {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarId: string;
+  avatarColor: string;
+  since?: number;
+}
+
+export interface FriendRequest {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarId: string;
+  avatarColor: string;
+  sentAt: number;
 }

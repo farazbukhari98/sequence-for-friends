@@ -22,6 +22,43 @@
   padding-bottom: var(--space-xl);
 }
 
+/* Top bar with profile and friends */
+.home-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: var(--space-sm);
+}
+
+.home-profile-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.home-profile-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 1.3rem;
+}
+
+.home-friends-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: var(--border-radius-full, 20px);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* Slick Typography Logo */
 .home-logo {
   display: flex;
@@ -32,6 +69,7 @@
 }
 
 .logo-icon {
+  position: relative;
   width: 80px;
   height: 80px;
   background: linear-gradient(135deg, var(--accent-primary), #a855f7);
@@ -56,6 +94,25 @@
   color: white;
   text-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
+
+.logo-chips {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  display: flex;
+  gap: 2px;
+}
+
+.chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.chip-blue { background: var(--team-blue); }
+.chip-green { background: var(--team-green); }
+.chip-red { background: var(--team-red); }
 
 .logo-title {
   font-family: var(--font-family-heading);
@@ -210,7 +267,7 @@
 /* Difficulty Selector */
 .difficulty-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 
@@ -260,12 +317,18 @@
 }
 .difficulty-btn.active.difficulty-hard .difficulty-label { color: #ef4444; }
 
+.difficulty-btn.active.difficulty-impossible {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: #8b5cf6;
+}
+.difficulty-btn.active.difficulty-impossible .difficulty-label { color: #8b5cf6; }
+
 /* Generic active state for non-difficulty buttons (e.g., game mode) */
-.difficulty-btn.active:not(.difficulty-easy):not(.difficulty-medium):not(.difficulty-hard) {
+.difficulty-btn.active:not(.difficulty-easy):not(.difficulty-medium):not(.difficulty-hard):not(.difficulty-impossible) {
   background: rgba(245, 158, 11, 0.15);
   border-color: #f59e0b;
 }
-.difficulty-btn.active:not(.difficulty-easy):not(.difficulty-medium):not(.difficulty-hard) .difficulty-label {
+.difficulty-btn.active:not(.difficulty-easy):not(.difficulty-medium):not(.difficulty-hard):not(.difficulty-impossible) .difficulty-label {
   color: #f59e0b;
 }
 
@@ -317,5 +380,9 @@
   .room-code-input {
     font-size: 1.6rem !important;
     height: 52px !important;
+  }
+
+  .difficulty-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

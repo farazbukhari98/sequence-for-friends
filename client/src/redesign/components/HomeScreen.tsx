@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, TurnTimeLimit, SequencesToWin, DEFAULT_SEQUENCES_TO_WIN, BotDifficulty, SequenceLength, DEFAULT_SEQUENCE_LENGTH } from '../../../../shared/types';
+import type { UserProfile } from '../../../../shared/types';
+import { getAvatarEmoji } from '../../lib/avatars';
 import './HomeScreen.css';
 
 interface HomeScreenProps {
@@ -7,12 +9,16 @@ interface HomeScreenProps {
   onCreateBotGame: (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength) => Promise<{ roomCode?: string; playerId?: string; token?: string; error?: string }>;
   onJoinRoom: (roomCode: string, playerName: string) => Promise<{ roomInfo?: unknown; playerId?: string; token?: string; error?: string }>;
   initialRoomCode?: string;
+  onClearRoomCode?: () => void;
+  user?: UserProfile;
+  onProfilePress?: () => void;
+  onFriendsPress?: () => void;
 }
 
-export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialRoomCode }: HomeScreenProps) {
+export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialRoomCode, onClearRoomCode, user, onProfilePress, onFriendsPress }: HomeScreenProps) {
   const [mode, setMode] = useState<'home' | 'create' | 'join' | 'bot'>('home');
   const [roomName, setRoomName] = useState('');
-  const [playerName, setPlayerName] = useState('');
+  const [playerName, setPlayerName] = useState(user?.displayName || '');
   const [roomCode, setRoomCode] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(2);
   const [turnTimeLimit, setTurnTimeLimit] = useState<TurnTimeLimit>(0);
@@ -31,7 +37,8 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
   }, [initialRoomCode]);
 
   const handleCreate = async () => {
-    if (!playerName.trim()) {
+    const name = user?.displayName || playerName.trim();
+    if (!name) {
       setError('Please enter your name');
       return;
     }
@@ -43,7 +50,7 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
     const teamCount = maxPlayers <= 3 ? maxPlayers : (maxPlayers % 2 === 0 ? 2 : 3);
 
     // Use room name if provided, otherwise default will be set by server
-    const result = await onCreateRoom(roomName.trim(), playerName.trim(), maxPlayers, teamCount, turnTimeLimit, sequencesToWin);
+    const result = await onCreateRoom(roomName.trim(), name, maxPlayers, teamCount, turnTimeLimit, sequencesToWin);
     setLoading(false);
 
     if (result.error) {
@@ -52,7 +59,8 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
   };
 
   const handleJoin = async () => {
-    if (!playerName.trim()) {
+    const name = user?.displayName || playerName.trim();
+    if (!name) {
       setError('Please enter your name');
       return;
     }
@@ -64,7 +72,7 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
     setLoading(true);
     setError(null);
 
-    const result = await onJoinRoom(roomCode.trim().toUpperCase(), playerName.trim());
+    const result = await onJoinRoom(roomCode.trim().toUpperCase(), name);
     setLoading(false);
 
     if (result.error) {
@@ -73,7 +81,8 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
   };
 
   const handleBotGame = async () => {
-    if (!playerName.trim()) {
+    const name = user?.displayName || playerName.trim();
+    if (!name) {
       setError('Please enter your name');
       return;
     }
@@ -81,7 +90,7 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
     setLoading(true);
     setError(null);
 
-    const result = await onCreateBotGame(playerName.trim(), botDifficulty, botSequenceLength);
+    const result = await onCreateBotGame(name, botDifficulty, botSequenceLength);
     setLoading(false);
 
     if (result.error) {
@@ -92,14 +101,24 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
   const handleBack = () => {
     setMode('home');
     setError(null);
-    // Clear URL parameter when going back
-    if (initialRoomCode) {
-      window.history.replaceState({}, '', window.location.pathname);
-    }
+    onClearRoomCode?.();
   };
 
   const renderHome = () => (
     <div className="home-content animate-fade-in">
+      {user && (
+        <div className="home-top-bar">
+          <button className="home-profile-btn" onClick={onProfilePress}>
+            <span className="home-profile-avatar" style={{ backgroundColor: user.avatarColor }}>
+              {getAvatarEmoji(user.avatarId)}
+            </span>
+          </button>
+          <button className="home-friends-btn" onClick={onFriendsPress}>
+            Friends
+          </button>
+        </div>
+      )}
+
       <div className="home-logo">
         <div className="logo-icon">
           <span className="logo-s">S</span>
@@ -164,18 +183,20 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
             <p className="form-hint">Optional - defaults to "[Your Name]'s Game"</p>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="name">Your Name</label>
-            <input
-              id="name"
-              type="text"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="Enter your name"
-              maxLength={20}
-              autoComplete="off"
-            />
-          </div>
+          {!user && (
+            <div className="form-group">
+              <label htmlFor="name">Your Name</label>
+              <input
+                id="name"
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Enter your name"
+                maxLength={20}
+                autoComplete="off"
+              />
+            </div>
+          )}
 
           <div className="form-group">
             <label htmlFor="players">Number of Players</label>
@@ -265,19 +286,21 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
             </div>
           )}
 
-          <div className="form-group">
-            <label htmlFor="name">Your Name</label>
-            <input
-              id="name"
-              type="text"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="Enter your name"
-              maxLength={20}
-              autoComplete="off"
-              autoFocus={!!initialRoomCode}
-            />
-          </div>
+          {!user && (
+            <div className="form-group">
+              <label htmlFor="name">Your Name</label>
+              <input
+                id="name"
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Enter your name"
+                maxLength={20}
+                autoComplete="off"
+                autoFocus={!!initialRoomCode}
+              />
+            </div>
+          )}
 
           <div className="form-group">
             <label htmlFor="code">Room Code</label>
@@ -318,23 +341,25 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
         <h2>Play vs Bot</h2>
 
         <div className="flex flex-col gap-lg mt-md">
-          <div className="form-group">
-            <label htmlFor="name">Your Name</label>
-            <input
-              id="name"
-              type="text"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="Enter your name"
-              maxLength={20}
-              autoComplete="off"
-            />
-          </div>
+          {!user && (
+            <div className="form-group">
+              <label htmlFor="name">Your Name</label>
+              <input
+                id="name"
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Enter your name"
+                maxLength={20}
+                autoComplete="off"
+              />
+            </div>
+          )}
 
           <div className="form-group">
             <label>Difficulty</label>
             <div className="difficulty-grid">
-              {(['easy', 'medium', 'hard'] as BotDifficulty[]).map((diff) => (
+              {(['easy', 'medium', 'hard', 'impossible'] as BotDifficulty[]).map((diff) => (
                 <button
                   key={diff}
                   className={`difficulty-btn ${botDifficulty === diff ? 'active' : ''} difficulty-${diff}`}
@@ -342,7 +367,7 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
                 >
                   <span className="difficulty-label">{diff.charAt(0).toUpperCase() + diff.slice(1)}</span>
                   <span className="difficulty-desc">
-                    {diff === 'easy' ? 'Random moves' : diff === 'medium' ? 'Smart plays' : 'Expert strategy'}
+                    {diff === 'easy' ? 'Random moves' : diff === 'medium' ? 'Smart plays' : diff === 'hard' ? 'Expert strategy' : 'Ruthless AI'}
                   </span>
                 </button>
               ))}

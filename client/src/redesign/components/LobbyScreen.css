@@ -123,6 +123,12 @@
   border: 1px solid rgba(255,255,255,0.2);
 }
 
+.room-code-invite {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-primary, #6366f1);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
 /* Game Info Dashboard */
 .game-info {
   display: grid;
@@ -470,6 +476,12 @@
   background: rgba(239, 68, 68, 0.15);
   border-color: #ef4444;
   color: #ef4444;
+}
+
+.add-bot-impossible:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: #8b5cf6;
+  color: #8b5cf6;
 }
 
 /* Disconnected Badge */

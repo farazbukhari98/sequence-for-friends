@@ -6,6 +6,7 @@ import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS,
 import { GameModeModal } from '../../components/GameModeModal';
 import type { GameModeType } from '../../components/GameModeModal';
 import type { GameModeInfo } from '../../hooks/useSocket';
+import { InviteFriendModal } from './InviteFriendModal';
 import './LobbyScreen.css';
 
 interface LobbyScreenProps {
@@ -24,6 +25,7 @@ interface LobbyScreenProps {
   onRespondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
   onClearTeamSwitchRequest: () => void;
   onClearGameModeInfo: () => void;
+  isAuthenticated?: boolean;
 }
 
 export function LobbyScreen({
@@ -42,10 +44,12 @@ export function LobbyScreen({
   onRespondTeamSwitch,
   onClearTeamSwitchRequest,
   onClearGameModeInfo,
+  isAuthenticated,
 }: LobbyScreenProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   const isHost = roomInfo.hostId === playerId;
   const canStart = VALID_PLAYER_COUNTS.includes(roomInfo.players.length);
@@ -198,7 +202,14 @@ export function LobbyScreen({
   return (
     <div className="lobby-screen">
       <header className="lobby-header">
-        <button className="back-button" onClick={onLeave}>
+        <button className="back-button" onClick={() => {
+          if (isHost && roomInfo.players.length > 1) {
+            if (!window.confirm('You are the host. Leaving will close the room for all players. Continue?')) {
+              return;
+            }
+          }
+          onLeave();
+        }}>
           &larr; Leave
         </button>
         <h1>{roomInfo.name}</h1>
@@ -217,6 +228,11 @@ export function LobbyScreen({
             <button className="room-code-btn room-code-share" onClick={(e) => { e.stopPropagation(); handleShare(); }}>
               Share
             </button>
+            {isAuthenticated && (
+              <button className="room-code-btn room-code-invite" onClick={(e) => { e.stopPropagation(); setShowInviteModal(true); }}>
+                Invite Friend
+              </button>
+            )}
           </div>
         </div>
 
@@ -355,6 +371,7 @@ export function LobbyScreen({
                   <button className="add-bot-btn add-bot-easy" onClick={() => handleAddBot('easy')}>Easy</button>
                   <button className="add-bot-btn add-bot-medium" onClick={() => handleAddBot('medium')}>Medium</button>
                   <button className="add-bot-btn add-bot-hard" onClick={() => handleAddBot('hard')}>Hard</button>
+                  <button className="add-bot-btn add-bot-impossible" onClick={() => handleAddBot('impossible')}>Impossible</button>
                 </div>
               )}
             </div>
@@ -505,6 +522,13 @@ export function LobbyScreen({
           modes={gameModeInfo.modes as GameModeType[]}
           hostName={gameModeInfo.changedBy}
           onAcknowledge={onClearGameModeInfo}
+        />
+      )}
+
+      {showInviteModal && (
+        <InviteFriendModal
+          roomCode={roomInfo.code}
+          onClose={() => setShowInviteModal(false)}
         />
       )}
     </div>
