@@ -14,6 +14,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-sm) var(--space-lg);
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--space-sm));
   background: rgba(10, 10, 10, 0.6);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -255,7 +256,7 @@
 /* Timeout Notification */
 .timeout-notification {
   position: fixed;
-  top: 70px;
+  top: calc(env(safe-area-inset-top, 0px) + 70px);
   left: 50%;
   transform: translateX(-50%);
   background: rgba(239, 68, 68, 0.95);
@@ -812,5 +813,6 @@
   .game-header {
     min-height: 44px;
     padding: var(--space-xs) var(--space-md);
+    padding-top: calc(env(safe-area-inset-top, 0px) + var(--space-xs));
   }
 }

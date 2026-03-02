@@ -192,6 +192,43 @@ export class SequenceWebSocket {
   }
 
   /**
+   * Force an immediate reconnect — used after iOS background/foreground.
+   * Aggressively replaces the socket even if _connected is still true,
+   * because iOS can kill the socket before onclose fires.
+   */
+  forceReconnect(): void {
+    if (this.intentionalClose) return;
+    if (!this.hasConnectedOnce) return; // nothing to reconnect to
+
+    // Cancel any pending backoff timer
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    // Reset backoff so the reconnect is immediate
+    this.reconnectAttempts = 0;
+
+    // Close the existing socket (may be dead already after iOS suspend)
+    if (this.ws) {
+      try { this.ws.close(1000, 'Force reconnect'); } catch {}
+      this.ws = null;
+    }
+    this._connected = false;
+    this.onClose?.();
+
+    // Reject pending requests — they'll be stale
+    for (const [, pending] of this.pendingRequests) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error('Force reconnect'));
+    }
+    this.pendingRequests.clear();
+
+    // Immediately open a fresh connection
+    this.connect();
+  }
+
+  /**
    * Close the connection permanently (no reconnect)
    */
   close(): void {

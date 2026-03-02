@@ -1,5 +1,6 @@
 .hand-container {
   height: clamp(90px, 14vh, 140px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: rgba(10, 10, 10, 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);

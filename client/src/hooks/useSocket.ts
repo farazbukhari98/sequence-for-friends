@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { SequenceWebSocket } from '../lib/websocket';
+import { useAppLifecycle } from './useAppLifecycle';
 import { getApiToken } from '../lib/api';
 import type {
   RoomInfo,
@@ -131,7 +132,11 @@ export function useSocket(): UseSocketReturn {
 
     ws.onOpen = () => {
       console.log('Connected to server');
-      setConnected(true);
+      // On initial connect, set connected immediately.
+      // On reconnect, defer until reconnect-to-room succeeds (handled in onReconnect).
+      if (!tokenRef.current) {
+        setConnected(true);
+      }
     };
 
     ws.onClose = () => {
@@ -146,11 +151,34 @@ export function useSocket(): UseSocketReturn {
       }
     };
 
-    // After auto-reconnect, the server's /ws/reconnect handler (triggered by the
-    // reconnect URL) automatically restores the player to the room and sends back
-    // room-updated / game-state-updated broadcasts. No client-side message needed.
-    ws.onReconnect = () => {
-      console.log('WebSocket auto-reconnected via /ws/reconnect endpoint');
+    // After auto-reconnect, send reconnect-to-room to reattach the player to the room.
+    // The transport is open but the player isn't in the room yet until this succeeds.
+    ws.onReconnect = async () => {
+      console.log('WebSocket auto-reconnected, sending reconnect-to-room...');
+      const token = tokenRef.current;
+      const roomCode = roomCodeRef.current;
+      if (!token || !roomCode) {
+        // No session to rejoin — just mark connected
+        setConnected(true);
+        return;
+      }
+      try {
+        const response = await ws.request<any>('reconnect-to-room', { roomCode, token });
+        if (response.success && response.roomInfo) {
+          setError(null);
+          setRoomInfo(response.roomInfo);
+          if (response.gameState) {
+            setGameState(response.gameState);
+          } else {
+            setGameState(null); // Clear stale game state
+          }
+          setConnected(true);
+        } else {
+          setError(response.error || 'Failed to rejoin room');
+        }
+      } catch {
+        setError('Failed to rejoin room after reconnect');
+      }
     };
 
     ws.onReconnectFailed = () => {
@@ -226,6 +254,9 @@ export function useSocket(): UseSocketReturn {
     // Set reconnect URL to the room-specific endpoint (not /ws/create)
     wsRef.current?.setReconnectUrl(wsUrl(`/ws/reconnect?token=${encodeURIComponent(token)}`));
   }, []);
+
+  // Detect app foreground/resume and force WebSocket reconnect
+  useAppLifecycle(wsRef, tokenRef);
 
   // Cleanup on unmount
   useEffect(() => {

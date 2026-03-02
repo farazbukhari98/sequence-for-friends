@@ -38,6 +38,9 @@ import type { DbGameHistory, DbGameParticipant } from './db/queries.js';
 // TIMER TYPES FOR ALARM QUEUE
 // ============================================
 
+/** How long to wait before skipping a disconnected player's turn (ms). */
+const DISCONNECT_SKIP_MS = 15_000;
+
 interface TimerEntry {
   type: 'turn-timeout' | 'bot-turn' | 'disconnect-skip' | 'cleanup';
   fireAt: number;
@@ -330,22 +333,12 @@ export class RoomDO implements DurableObject {
       return;
     }
 
-    const isHost = this.room.hostId === playerId;
     const isInGame = this.room.phase === 'in-game';
 
     this.wsToPlayer.delete(ws);
     this.playerToWs.delete(playerId);
 
-    // If host disconnects during game, close room
-    if (isHost && isInGame) {
-      await this.clearAllTimers();
-      this.broadcast({ type: 'room-closed', data: 'Host left the game' });
-      this.closeAllConnections();
-      await this.destroyRoom();
-      return;
-    }
-
-    // Mark player as disconnected
+    // Mark player as disconnected (host is treated the same as anyone during gameplay)
     const player = this.room.players.find(p => p.id === playerId);
     if (player && !player.isBot) {
       player.connected = false;
@@ -354,12 +347,12 @@ export class RoomDO implements DurableObject {
     this.broadcast({ type: 'player-disconnected', data: playerId });
     this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
 
-    // If it's this player's turn, auto-skip after 3 seconds
+    // If it's this player's turn, auto-skip after DISCONNECT_SKIP_MS
     if (isInGame && this.room.gameState && this.room.gameState.phase === 'playing') {
       const currentPlayer = this.room.gameState.players[this.room.gameState.currentPlayerIndex];
       if (currentPlayer.id === playerId) {
         await this.clearTimer('turn-timeout');
-        await this.scheduleTimer('disconnect-skip', 3000);
+        await this.scheduleTimer('disconnect-skip', DISCONNECT_SKIP_MS);
       }
     }
 
@@ -588,9 +581,14 @@ export class RoomDO implements DurableObject {
       { expirationTtl: 7 * 86400 }
     );
 
-    // Cancel cleanup and disconnect-skip timers
+    // Always cancel cleanup timer (any player reconnecting means room is alive)
     await this.clearTimer('cleanup');
-    await this.clearTimer('disconnect-skip');
+
+    // Only cancel disconnect-skip if the reconnecting player is the one whose turn it is
+    if (this.room.gameState &&
+        this.room.gameState.players[this.room.gameState.currentPlayerIndex].id === player.id) {
+      await this.clearTimer('disconnect-skip');
+    }
 
     const roomInfo = toRoomInfo(this.room);
     const gameState = this.room.gameState
@@ -605,6 +603,7 @@ export class RoomDO implements DurableObject {
     });
 
     this.broadcastExcept(ws, { type: 'player-reconnected', data: player.id });
+    this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
   }
 
   private async handleLeaveRoom(ws: WebSocket): Promise<void> {
@@ -1109,7 +1108,7 @@ export class RoomDO implements DurableObject {
       // otherwise we'd loop forever skipping disconnected players
       const hasConnectedHuman = gameState.players.some(p => p.connected && !p.isBot);
       if (hasConnectedHuman) {
-        this.timers.push({ type: 'disconnect-skip', fireAt: Date.now() + 3000 });
+        this.timers.push({ type: 'disconnect-skip', fireAt: Date.now() + DISCONNECT_SKIP_MS });
         this.timers.sort((a, b) => a.fireAt - b.fireAt);
       }
     } else {
