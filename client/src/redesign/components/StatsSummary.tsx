@@ -82,6 +82,21 @@ export function StatsSummary({ stats }: StatsSummaryProps) {
         </div>
       )}
 
+      {stats.hasBeatImpossibleBot && (
+        <div className="stats-section">
+          <h3 className="stats-section-title">Achievements</h3>
+          <div className="achievement-card">
+            <span className="achievement-icon">&#x1F3C6;</span>
+            <div className="achievement-info">
+              <span className="achievement-name">Impossible Victor</span>
+              <span className="achievement-desc">
+                Defeated the Impossible bot{stats.impossibleBotWins > 1 ? ` ${stats.impossibleBotWins} times` : ''}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="stats-section">
         <h3 className="stats-section-title">Time</h3>
         <div className="stats-row">

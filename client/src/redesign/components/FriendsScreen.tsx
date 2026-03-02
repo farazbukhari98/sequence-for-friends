@@ -155,7 +155,12 @@ export function FriendsScreen({ onBack }: FriendsScreenProps) {
                       {getAvatarEmoji(friend.avatarId)}
                     </div>
                     <div className="friend-info">
-                      <span className="friend-name">{friend.displayName}</span>
+                      <span className="friend-name">
+                        {friend.displayName}
+                        {friend.hasBeatImpossibleBot && (
+                          <span className="friend-trophy" title="Impossible Victor">&#x1F3C6;</span>
+                        )}
+                      </span>
                       <span className="friend-username">@{friend.username}</span>
                     </div>
                     <button

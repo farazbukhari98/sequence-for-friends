@@ -93,6 +93,13 @@ export function ProfileScreen({ user, onBack, onSignOut, onUpdateUser }: Profile
             </div>
             <h2 className="profile-name">{user.displayName}</h2>
             <p className="profile-username">@{user.username}</p>
+            {stats?.hasBeatImpossibleBot && (
+              <div style={{ textAlign: 'center', marginTop: -12, marginBottom: 24 }}>
+                <span className="profile-trophy-badge">
+                  <span className="trophy-icon">&#x1F3C6;</span> Impossible Victor
+                </span>
+              </div>
+            )}
           </>
         )}
 

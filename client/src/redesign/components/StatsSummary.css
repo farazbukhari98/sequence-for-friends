@@ -65,3 +65,35 @@
   letter-spacing: 0.05em;
   margin: 0 0 8px;
 }
+
+.achievement-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(234, 179, 8, 0.03));
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.achievement-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.achievement-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.achievement-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #eab308;
+}
+
+.achievement-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+}

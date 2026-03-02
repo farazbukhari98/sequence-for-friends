@@ -632,6 +632,8 @@ export interface UserStats {
   seriesLost: number;
   totalPlayTimeMs: number;
   fastestWinMs: number | null;
+  impossibleBotWins: number;
+  hasBeatImpossibleBot: boolean;
 }
 
 export interface FriendInfo {
@@ -641,6 +643,7 @@ export interface FriendInfo {
   avatarId: string;
   avatarColor: string;
   since?: number;
+  hasBeatImpossibleBot?: boolean;
 }
 
 export interface FriendRequest {

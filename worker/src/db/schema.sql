@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS user_stats (
   series_lost INTEGER NOT NULL DEFAULT 0,
   total_play_time_ms INTEGER NOT NULL DEFAULT 0,
   fastest_win_ms INTEGER,
+  impossible_bot_wins INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
 
@@ -62,7 +63,8 @@ CREATE TABLE IF NOT EXISTS game_history (
   sequence_length INTEGER NOT NULL DEFAULT 5,
   sequences_to_win INTEGER NOT NULL DEFAULT 2,
   is_series_game INTEGER NOT NULL DEFAULT 0,
-  series_id TEXT
+  series_id TEXT,
+  bot_difficulty TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_game_history_ended_at ON game_history(ended_at);

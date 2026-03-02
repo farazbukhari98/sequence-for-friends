@@ -365,7 +365,14 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
                 <button
                   key={diff}
                   className={`difficulty-btn ${botDifficulty === diff ? 'active' : ''} difficulty-${diff}`}
-                  onClick={() => setBotDifficulty(diff)}
+                  onClick={() => {
+                    setBotDifficulty(diff);
+                    if (diff === 'impossible') {
+                      setBotSequencesToWin(4);
+                    } else if (botDifficulty === 'impossible') {
+                      setBotSequencesToWin(DEFAULT_SEQUENCES_TO_WIN);
+                    }
+                  }}
                 >
                   <span className="difficulty-label">{diff.charAt(0).toUpperCase() + diff.slice(1)}</span>
                   <span className="difficulty-desc">
@@ -396,23 +403,31 @@ export function HomeScreen({ onCreateRoom, onCreateBotGame, onJoinRoom, initialR
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Sequences to Win</label>
-            <div className="sequences-to-win-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-              {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  className={"sequences-btn " + (botSequencesToWin === option.value ? 'active' : '')}
-                  onClick={() => setBotSequencesToWin(option.value)}
-                >
-                  {option.value}
-                </button>
-              ))}
+          {botDifficulty === 'impossible' ? (
+            <div className="form-group">
+              <p className="form-hint" style={{ textAlign: 'center', opacity: 0.7 }}>
+                4 sequences to win &middot; 15s timer
+              </p>
             </div>
-            <p className="form-hint mt-sm">
-              First to complete {botSequencesToWin} sequence{botSequencesToWin > 1 ? 's' : ''} wins
-            </p>
-          </div>
+          ) : (
+            <div className="form-group">
+              <label>Sequences to Win</label>
+              <div className="sequences-to-win-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    className={"sequences-btn " + (botSequencesToWin === option.value ? 'active' : '')}
+                    onClick={() => setBotSequencesToWin(option.value)}
+                  >
+                    {option.value}
+                  </button>
+                ))}
+              </div>
+              <p className="form-hint mt-sm">
+                First to complete {botSequencesToWin} sequence{botSequencesToWin > 1 ? 's' : ''} wins
+              </p>
+            </div>
+          )}
 
           <div className="form-group">
             <label>Series</label>

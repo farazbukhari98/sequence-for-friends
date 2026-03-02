@@ -116,6 +116,11 @@
   font-size: 0.95rem;
 }
 
+.friend-trophy {
+  margin-left: 4px;
+  font-size: 0.85rem;
+}
+
 .friend-username {
   display: block;
   color: var(--text-muted, #888);

@@ -39,6 +39,7 @@ export interface DbUserStats {
   series_lost: number;
   total_play_time_ms: number;
   fastest_win_ms: number | null;
+  impossible_bot_wins: number;
   updated_at: number;
 }
 
@@ -56,6 +57,7 @@ export interface DbGameHistory {
   sequences_to_win: number;
   is_series_game: number;
   series_id: string | null;
+  bot_difficulty: string | null;
 }
 
 export interface DbGameParticipant {
@@ -196,12 +198,13 @@ export async function insertGameHistory(
 ): Promise<void> {
   const stmts: D1PreparedStatement[] = [
     db.prepare(
-      `INSERT INTO game_history (id, room_code, started_at, ended_at, duration_ms, player_count, team_count, winning_team_idx, was_stalemate, sequence_length, sequences_to_win, is_series_game, series_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO game_history (id, room_code, started_at, ended_at, duration_ms, player_count, team_count, winning_team_idx, was_stalemate, sequence_length, sequences_to_win, is_series_game, series_id, bot_difficulty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       game.id, game.room_code, game.started_at, game.ended_at, game.duration_ms,
       game.player_count, game.team_count, game.winning_team_idx, game.was_stalemate,
-      game.sequence_length, game.sequences_to_win, game.is_series_game, game.series_id
+      game.sequence_length, game.sequences_to_win, game.is_series_game, game.series_id,
+      game.bot_difficulty
     ),
   ];
 
@@ -247,6 +250,9 @@ export async function insertGameHistory(
             THEN ?
             ELSE fastest_win_ms
           END,
+          impossible_bot_wins = impossible_bot_wins + CASE
+            WHEN ? = 'impossible' AND ? = 1 THEN 1 ELSE 0
+          END,
           updated_at = ?
         WHERE user_id = ?
       `).bind(
@@ -266,6 +272,8 @@ export async function insertGameHistory(
         p.won, // for fastest_win CASE condition
         durationMs, // for fastest_win comparison
         durationMs, // for fastest_win set value
+        game.bot_difficulty, // for impossible_bot_wins CASE
+        p.won, // for impossible_bot_wins CASE
         Date.now(),
         p.user_id
       )
@@ -322,11 +330,13 @@ export async function getGameHistory(
 // FRIENDS QUERIES
 // ============================================
 
-export async function getFriends(db: D1Database, userId: string): Promise<(DbFriend & { username: string; display_name: string; avatar_id: string; avatar_color: string })[]> {
+export async function getFriends(db: D1Database, userId: string): Promise<(DbFriend & { username: string; display_name: string; avatar_id: string; avatar_color: string; impossible_bot_wins: number })[]> {
   const result = await db.prepare(`
-    SELECT f.*, u.username, u.display_name, u.avatar_id, u.avatar_color
+    SELECT f.*, u.username, u.display_name, u.avatar_id, u.avatar_color,
+           COALESCE(s.impossible_bot_wins, 0) AS impossible_bot_wins
     FROM friends f
     INNER JOIN users u ON f.friend_id = u.id
+    LEFT JOIN user_stats s ON f.friend_id = s.user_id
     WHERE f.user_id = ? AND f.status = 'accepted'
     ORDER BY u.display_name ASC
   `).bind(userId).all();

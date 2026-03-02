@@ -432,6 +432,7 @@ async function handleGetFriends(request: Request, env: Env): Promise<Response> {
       avatarId: f.avatar_id,
       avatarColor: f.avatar_color,
       since: f.accepted_at,
+      hasBeatImpossibleBot: (f as any).impossible_bot_wins > 0,
     })),
   });
 }
@@ -662,6 +663,7 @@ function emptyStats() {
     oneEyedJacksUsed: 0, deadCardsReplaced: 0, totalTurnsTaken: 0,
     firstMoveGames: 0, firstMoveWins: 0, seriesPlayed: 0,
     seriesWon: 0, seriesLost: 0, totalPlayTimeMs: 0, fastestWinMs: null,
+    impossibleBotWins: 0, hasBeatImpossibleBot: false,
   };
 }
 
@@ -685,6 +687,7 @@ interface DbStats {
   series_lost: number;
   total_play_time_ms: number;
   fastest_win_ms: number | null;
+  impossible_bot_wins: number;
 }
 
 function formatStats(stats: DbStats) {
@@ -709,5 +712,7 @@ function formatStats(stats: DbStats) {
     seriesLost: stats.series_lost,
     totalPlayTimeMs: stats.total_play_time_ms,
     fastestWinMs: stats.fastest_win_ms,
+    impossibleBotWins: stats.impossible_bot_wins || 0,
+    hasBeatImpossibleBot: (stats.impossible_bot_wins || 0) > 0,
   };
 }

@@ -445,10 +445,15 @@ export class RoomDO implements DurableObject {
     };
     const turnTimeLimit = (turnTimerByDifficulty[difficulty] ?? 0) as import('../../shared/types.js').TurnTimeLimit;
 
+    // Impossible difficulty always requires 4 sequences to win
+    const effectiveSequencesToWin = difficulty === 'impossible'
+      ? 4 as import('../../shared/types.js').SequencesToWin
+      : sequencesToWin;
+
     const host = createPlayer(playerName, true, userId);
     this.room = createRoomData(
       roomCode, `${playerName} vs Bot`, host, 2, 2,
-      turnTimeLimit, sequencesToWin, sequenceLength, seriesLength
+      turnTimeLimit, effectiveSequencesToWin, sequenceLength, seriesLength
     );
 
     this.wsToPlayer.set(ws, host.id);
@@ -1300,6 +1305,7 @@ export class RoomDO implements DurableObject {
 
     // Build game history record
     const gameId = crypto.randomUUID();
+    const botPlayer = this.room.players.find(p => p.isBot);
     const game: DbGameHistory = {
       id: gameId,
       room_code: this.room.code,
@@ -1314,6 +1320,7 @@ export class RoomDO implements DurableObject {
       sequences_to_win: gs.config.sequencesToWin,
       is_series_game: this.room.seriesState ? 1 : 0,
       series_id: null,
+      bot_difficulty: botPlayer?.botDifficulty || null,
     };
 
     // Build participants - only for human players with userId
