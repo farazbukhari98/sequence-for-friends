@@ -15,7 +15,6 @@ Current native candidate build number: `30`
 
 - Run `npm test` from the repo root.
 - Build the app for iOS Simulator from `client/ios/App/App.xcodeproj`.
-- Confirm the app target no longer links `CapApp-SPM` or includes Capacitor plugin sources/resources.
 - Confirm the app launches to the native auth flow without an automatic push permission prompt.
 
 ## Manual Device Gates

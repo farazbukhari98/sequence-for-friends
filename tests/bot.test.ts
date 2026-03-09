@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   GameState,
   BoardChips,
@@ -214,16 +214,16 @@ describe('Bot Move Decision - Medium', () => {
     // But we gave bot 7D not 6D. Let's give bot 6D instead.
     bot.hand = ['6D', '3H'];
 
-    // Run multiple times to check preference
-    let completingCount = 0;
-    for (let i = 0; i < 20; i++) {
-      const action = decideBotAction(gs, bot, 'medium');
-      if (action.type === 'play-normal' && 'targetRow' in action && action.targetRow === 2 && action.targetCol === 6) {
-        completingCount++;
-      }
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const action = decideBotAction(gs, bot, 'medium');
+    randomSpy.mockRestore();
+
+    expect(action.type).toBe('play-normal');
+    if (action.type === 'play-normal') {
+      expect(action.card).toBe('6D');
+      expect(action.targetRow).toBe(2);
+      expect(action.targetCol).toBe(6);
     }
-    // Medium picks from top 3 moves randomly, so sequence-completing move should be chosen often
-    expect(completingCount).toBeGreaterThan(3);
   });
 });
 

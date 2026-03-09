@@ -15,7 +15,7 @@ import { sendPushNotification } from './apns.js';
 // HELPERS
 // ============================================
 
-// Valid avatar IDs and colors — must match client/src/lib/avatars.ts
+// Valid avatar IDs and colors — must match the native iOS avatar picker
 const VALID_AVATAR_IDS = new Set([
   'bear', 'fox', 'cat', 'dog', 'owl', 'unicorn', 'dragon', 'octopus',
   'penguin', 'koala', 'lion', 'wolf', 'eagle', 'rabbit', 'panda', 'alien',

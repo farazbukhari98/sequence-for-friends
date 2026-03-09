@@ -1,20 +1,20 @@
 # Sequence for Friends
 
-A real-time multiplayer web app to play the classic board game **Sequence** with friends. Mobile-first design with smooth pinch-zoom and touch interactions.
+A real-time multiplayer **iOS app** for playing the classic board game **Sequence** with friends. The active product is a native SwiftUI client backed by a Cloudflare Worker multiplayer server.
 
 ## Features
 
 - **2-12 players** in teams or individually
-- **Real-time multiplayer** via Socket.IO
-- **Mobile-first design** with large touch targets
-- **Pinch-zoom and pan** for the game board
+- **Real-time multiplayer** via WebSocket room state
+- **Native SwiftUI iOS client**
 - **Complete Sequence rules** including:
   - Two-eyed jacks (wild placement)
   - One-eyed jacks (remove opponent chips)
   - Dead card replacement
   - Sequence locking
   - Win conditions (2 sequences for 2-team, 1 for 3-team)
-- **Reconnect support** via player tokens stored in localStorage
+- **King Of The Board** multiplayer mode
+- **Reconnect support** with persisted room sessions
 - **Colorblind-safe** chip design with letters (B/G/R)
 
 ## Quick Start
@@ -22,28 +22,33 @@ A real-time multiplayer web app to play the classic board game **Sequence** with
 ### Development
 
 ```bash
-# Install dependencies
 npm install
-cd server && npm install
-cd ../client && npm install
-cd ..
 
-# Run in development mode
+# Run the backend locally
 npm run dev
 ```
 
-This starts:
-- Server on `http://localhost:3001`
-- Client on `http://localhost:5173`
+This starts the Cloudflare Worker locally.
 
-### Production Build
+### Validation
 
 ```bash
+npm test
 npm run build
-npm start
 ```
 
-The server will serve the built client on port 3001 (or `PORT` env var).
+### Native iOS Build
+
+```bash
+npm run build:ios
+```
+
+Or build directly:
+
+```bash
+xcodebuild -project client/ios/App/App.xcodeproj -scheme App \
+  -destination "platform=iOS Simulator,name=iPhone 17 Pro" build
+```
 
 ### Running Tests
 
@@ -55,14 +60,14 @@ npm test
 
 ### Creating a Game
 
-1. Open the app on your phone or browser
+1. Open the iOS app
 2. Tap **Create Game**
 3. Enter your name and select the number of players
 4. Share the **room code** with your friends
 
 ### Joining a Game
 
-1. Open the app
+1. Open the iOS app
 2. Tap **Join Game**
 3. Enter the room code and your name
 4. Wait for the host to start
@@ -90,53 +95,27 @@ If both spaces for a card are occupied, it shows a **DEAD** badge. Tap **Replace
 
 A sequence is 5 chips in a row (horizontal, vertical, or diagonal). Corners are wild and count for everyone!
 
-## Gestures (Mobile)
-
-| Gesture | Action |
-|---------|--------|
-| **Pinch** | Zoom in/out on the board |
-| **Drag** (when zoomed) | Pan around the board |
-| **Double-tap** | Reset zoom to default |
-| **Tap card** | Select/deselect card |
-| **Tap cell** | Select placement target |
-
 ## Tech Stack
 
-- **Frontend**: React + Vite + TypeScript
-- **Backend**: Node.js + Express + Socket.IO
-- **State**: In-memory (no database)
-- **Styling**: CSS with custom properties
-
-## Deploying to Render
-
-1. Push this repo to GitHub
-2. Create a new **Web Service** on Render
-3. Connect your GitHub repo
-4. Render will auto-detect the `render.yaml` configuration
-5. Deploy!
-
-Or use the Render Blueprint:
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+- **Client**: SwiftUI + UIKit integration where needed
+- **Backend**: Cloudflare Worker + Durable Objects + D1
+- **Shared rules/types**: TypeScript
+- **Tests**: Vitest
 
 ## Project Structure
 
 ```
 SequenceForFriends/
-├── client/               # React frontend
-│   ├── src/
-│   │   ├── components/   # UI components
-│   │   ├── hooks/        # Custom React hooks
-│   │   └── styles/       # Global CSS
-│   └── ...
-├── server/               # Express backend
+├── client/
+│   └── ios/              # Native iOS app
+├── worker/               # Cloudflare Worker backend
 │   └── src/
 │       ├── rules/        # Game rule engine
 │       └── ...
 ├── shared/               # Shared TypeScript types
 │   └── types.ts
 ├── tests/                # Vitest tests
-└── render.yaml           # Render deployment config
+└── docs/                 # Release/runbook docs
 ```
 
 ## Game Rules Reference
@@ -162,16 +141,10 @@ In 2-sequence mode, your second sequence can share **at most 1 chip** from your 
 
 ## iOS Development
 
-The iOS release path is now **native SwiftUI**. The app target no longer links the old Capacitor bridge package, and Capacitor is no longer part of the iOS runtime or TestFlight source of truth.
+The app is fully native SwiftUI. There is no browser client in the active repo layout.
 
 ### Native Runtime Notes
 
-```bash
-xcodebuild -project client/ios/App/App.xcodeproj -scheme App \
-  -destination "platform=iOS Simulator,name=iPhone 17" build
-```
-
-- Do not use `npm run cap:sync` as part of the native release process.
 - Do not depend on bundled web assets for the iOS runtime.
 - Push permission is user-triggered after sign-in, not requested at launch.
 - Reinstall/regression validation must include uninstall -> reinstall -> Sign in with Apple on the same build.

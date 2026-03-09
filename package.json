@@ -4,16 +4,16 @@
   "description": "Real-time multiplayer Sequence board game",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:worker\" \"npm run dev:client\"",
+    "dev": "npm run dev:worker",
     "dev:worker": "cd worker && npx wrangler dev",
-    "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
-    "build": "npm run build:client",
-    "build:client": "cd client && npm run build",
+    "build": "npm run build:worker",
+    "build:worker": "cd worker && npx tsc -p tsconfig.json --noEmit",
+    "build:ios": "xcodebuild -project client/ios/App/App.xcodeproj -scheme App -destination 'generic/platform=iOS Simulator' build",
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preview": "wrangler dev"
+    "preview": "cd worker && npx wrangler dev"
   },
   "keywords": [
     "sequence",
@@ -24,7 +24,6 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^8.2.2",
     "vitest": "^1.6.0",
     "wrangler": "^4.69.0"
   }
