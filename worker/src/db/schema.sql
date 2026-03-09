@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS game_history (
   team_count INTEGER NOT NULL,
   winning_team_idx INTEGER,
   was_stalemate INTEGER NOT NULL DEFAULT 0,
+  game_variant TEXT NOT NULL DEFAULT 'classic',
   sequence_length INTEGER NOT NULL DEFAULT 5,
   sequences_to_win INTEGER NOT NULL DEFAULT 2,
   is_series_game INTEGER NOT NULL DEFAULT 0,

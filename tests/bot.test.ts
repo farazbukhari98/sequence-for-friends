@@ -5,11 +5,13 @@ import {
   Player,
   TeamColor,
   CardCode,
+  GameVariant,
   TEAM_COLORS_2,
 } from '../shared/types';
 import { createBotPlayer, generateBotName, decideBotAction, getBotDelay, BOT_NAMES } from '../worker/src/bot';
 import { createDeck } from '../worker/src/rules/deck';
 import { isDeadCard } from '../worker/src/rules/engine';
+import { KING_ZONE_PRESETS } from '../worker/src/rules/kingOfTheBoard';
 
 // Helper to create an empty board
 function createEmptyBoard(): BoardChips {
@@ -35,15 +37,21 @@ function createTestPlayer(id: string, teamIndex: number, teamColor: TeamColor, h
 // Helper to create a basic game state for testing
 function createTestGameState(
   players: Player[],
-  currentPlayerIndex: number = 0
+  currentPlayerIndex: number = 0,
+  gameVariant: GameVariant = 'classic'
 ): GameState {
+  const teamScores = new Map<number, number>([[0, 0], [1, 0]]);
+  const sequencesCompleted = new Map<number, number>([[0, 0], [1, 0]]);
+
   return {
     phase: 'playing',
     config: {
       playerCount: players.length,
       teamCount: 2,
       teamColors: TEAM_COLORS_2,
+      gameVariant,
       sequencesToWin: 2,
+      scoreToWin: gameVariant === 'king-of-the-board' ? 3 : 2,
       sequenceLength: 5,
       handSize: 7,
     },
@@ -53,8 +61,10 @@ function createTestGameState(
     deck: createDeck(),
     boardChips: createEmptyBoard(),
     lockedCells: new Map(),
-    sequencesCompleted: new Map(),
+    sequencesCompleted,
+    teamScores,
     completedSequences: [],
+    kingZone: gameVariant === 'king-of-the-board' ? KING_ZONE_PRESETS[0] : null,
     deadCardReplacedThisTurn: false,
     pendingDraw: false,
     lastRemovedCell: null,
@@ -64,7 +74,9 @@ function createTestGameState(
     turnTimeLimit: 0,
     turnStartedAt: null,
     sequenceTimestamps: new Map(),
+    scoreTimestamps: new Map(),
     eventLog: [],
+    firstPlayerId: players[currentPlayerIndex]?.id || null,
   };
 }
 
@@ -245,6 +257,35 @@ describe('Bot Move Decision - Hard', () => {
     if (action.type === 'play-one-eyed') {
       expect(action.targetRow).toBe(4);
       expect([3, 4, 5, 6]).toContain(action.targetCol);
+    }
+  });
+});
+
+describe('Bot Move Decision - Impossible', () => {
+  it('should not overvalue duplicate blitz corner windows when blocking', () => {
+    const bot = createTestPlayer('bot-1', 0, 'blue', ['JD']);
+    bot.isBot = true;
+    bot.botDifficulty = 'impossible';
+    const human = createTestPlayer('human', 1, 'green');
+    const gs = createTestGameState([bot, human]);
+
+    gs.config.sequenceLength = 4;
+
+    // Threat A: screenshot-style corner overlap on the top-right column.
+    gs.boardChips[1][9] = 1;
+    gs.boardChips[3][9] = 1;
+    gs.boardChips[4][9] = 1;
+
+    // Threat B: a single blitz completion in the center.
+    gs.boardChips[4][2] = 1;
+    gs.boardChips[4][3] = 1;
+    gs.boardChips[4][5] = 1;
+
+    const action = decideBotAction(gs, bot, 'impossible');
+    expect(action.type).toBe('play-two-eyed');
+    if (action.type === 'play-two-eyed') {
+      expect(action.targetRow).toBe(4);
+      expect(action.targetCol).toBe(4);
     }
   });
 });

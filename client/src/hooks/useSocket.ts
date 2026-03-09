@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { SequenceWebSocket } from '../lib/websocket';
+import {
+  classifyReconnectResponse,
+  retryReconnect,
+  type ReconnectFailure,
+} from '../lib/reconnect';
 import { useAppLifecycle } from './useAppLifecycle';
 import { getApiToken } from '../lib/api';
 import type {
@@ -13,7 +18,9 @@ import type {
   TeamSwitchRequest,
   SequenceLength,
   SeriesLength,
+  GameVariant,
   BotDifficulty,
+  ReconnectResponse,
 } from '../../../shared/types';
 
 // Game mode info from server
@@ -24,8 +31,17 @@ export interface GameModeInfo {
     sequenceLength: number;
     turnTimeLimit: number;
     seriesLength: number;
+    gameVariant: GameVariant;
   };
 }
+
+type ReconnectSuccess = {
+  roomInfo: RoomInfo;
+  gameState?: ClientGameState;
+  playerId: string;
+};
+
+type ReconnectResult = ReconnectSuccess | ReconnectFailure;
 
 interface UseSocketReturn {
   socket: SequenceWebSocket | null;
@@ -43,13 +59,13 @@ interface UseSocketReturn {
   createRoom: (roomName: string, playerName: string, maxPlayers: number, teamCount: number, turnTimeLimit?: TurnTimeLimit, sequencesToWin?: SequencesToWin) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   createBotGame: (playerName: string, difficulty: BotDifficulty, sequenceLength?: SequenceLength, sequencesToWin?: SequencesToWin, seriesLength?: SeriesLength) => Promise<{ roomCode: string; playerId: string; token: string } | { error: string }>;
   joinRoom: (roomCode: string, playerName: string, token?: string) => Promise<{ roomInfo: RoomInfo; playerId: string; token: string } | { error: string }>;
-  reconnect: (roomCode: string, token: string) => Promise<{ roomInfo: RoomInfo; gameState?: ClientGameState; playerId: string } | { error: string }>;
+  reconnect: (roomCode: string, token: string) => Promise<ReconnectResult>;
   leaveRoom: () => void;
   kickPlayer: (playerId: string) => void;
   addBot: (difficulty: BotDifficulty) => Promise<{ success: boolean; error?: string }>;
   startGame: () => Promise<{ success: boolean; error?: string }>;
   sendAction: (action: GameAction) => Promise<MoveResult>;
-  updateRoomSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }) => Promise<{ success: boolean; error?: string }>;
+  updateRoomSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength; gameVariant?: GameVariant }) => Promise<{ success: boolean; error?: string }>;
   toggleReady: () => Promise<{ success: boolean; error?: string }>;
   requestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
   respondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -116,6 +132,101 @@ export function useSocket(): UseSocketReturn {
   // Session credentials for auto-reconnect
   const tokenRef = useRef<string | null>(null);
   const roomCodeRef = useRef<string | null>(null);
+  const attachPendingRef = useRef(false);
+
+  const isSocketActive = useCallback((ws: SequenceWebSocket) => {
+    return wsRef.current === ws;
+  }, [reattachToRoom]);
+
+  const applyReconnectState = useCallback((result: ReconnectSuccess) => {
+    setError(null);
+    setRoomInfo(result.roomInfo);
+    if (result.gameState) {
+      setGameState(result.gameState);
+    } else {
+      setGameState(null);
+    }
+    setConnected(true);
+  }, []);
+
+  const reattachToRoom = useCallback(async (
+    ws: SequenceWebSocket,
+    roomCode: string,
+    token: string,
+  ): Promise<ReconnectResult> => {
+    attachPendingRef.current = true;
+
+    const result = await retryReconnect<ReconnectSuccess>({
+      isActive: () => isSocketActive(ws),
+      attempt: async () => {
+        try {
+          const response = await ws.request<ReconnectResponse>('reconnect-to-room', {
+            roomCode,
+            token,
+          });
+          const failure = classifyReconnectResponse(response);
+          if (!failure && response.roomInfo && response.playerId) {
+            return {
+              success: true,
+              value: {
+                roomInfo: response.roomInfo,
+                gameState: response.gameState,
+                playerId: response.playerId,
+              },
+            };
+          }
+
+          return {
+            success: false,
+            failure: failure || {
+              error: 'Failed to rejoin room',
+              terminal: false,
+            },
+          };
+        } catch (e) {
+          return {
+            success: false,
+            failure: {
+              error: e instanceof Error ? e.message : 'Failed to rejoin room after reconnect',
+              terminal: false,
+            },
+          };
+        }
+      },
+    });
+
+    if (!isSocketActive(ws)) {
+      return {
+        error: 'Reconnect superseded',
+        terminal: false,
+      };
+    }
+
+    attachPendingRef.current = false;
+
+    if (result.success) {
+      applyReconnectState(result.value);
+      return result.value;
+    }
+
+    if (result.failure.terminal) {
+      tokenRef.current = null;
+      roomCodeRef.current = null;
+      setRoomInfo(null);
+      setGameState(null);
+      setCutCards(null);
+      setConnected(false);
+      ws.close();
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+      }
+    }
+
+    if (result.failure.error !== 'Reconnect superseded') {
+      setError(result.failure.error);
+    }
+    return result.failure;
+  }, [applyReconnectState, isSocketActive]);
 
   /**
    * Connect a WebSocket to a specific path and register all event listeners.
@@ -134,7 +245,7 @@ export function useSocket(): UseSocketReturn {
       console.log('Connected to server');
       // On initial connect, set connected immediately.
       // On reconnect, defer until reconnect-to-room succeeds (handled in onReconnect).
-      if (!tokenRef.current) {
+      if (!attachPendingRef.current) {
         setConnected(true);
       }
     };
@@ -146,7 +257,7 @@ export function useSocket(): UseSocketReturn {
 
     ws.onError = () => {
       // Only show error if we don't have credentials (i.e., not a recoverable disconnect)
-      if (!tokenRef.current) {
+      if (!tokenRef.current && !attachPendingRef.current) {
         setError('Connection failed');
       }
     };
@@ -159,29 +270,16 @@ export function useSocket(): UseSocketReturn {
       const roomCode = roomCodeRef.current;
       if (!token || !roomCode) {
         // No session to rejoin — just mark connected
+        attachPendingRef.current = false;
         setConnected(true);
         return;
       }
-      try {
-        const response = await ws.request<any>('reconnect-to-room', { roomCode, token });
-        if (response.success && response.roomInfo) {
-          setError(null);
-          setRoomInfo(response.roomInfo);
-          if (response.gameState) {
-            setGameState(response.gameState);
-          } else {
-            setGameState(null); // Clear stale game state
-          }
-          setConnected(true);
-        } else {
-          setError(response.error || 'Failed to rejoin room');
-        }
-      } catch {
-        setError('Failed to rejoin room after reconnect');
-      }
+
+      await reattachToRoom(ws, roomCode, token);
     };
 
     ws.onReconnectFailed = () => {
+      attachPendingRef.current = false;
       setError('Lost connection to server. Please refresh to rejoin.');
     };
 
@@ -231,6 +329,7 @@ export function useSocket(): UseSocketReturn {
       setGameState(null);
       setCutCards(null);
       // Clear credentials — room no longer exists
+      attachPendingRef.current = false;
       tokenRef.current = null;
       roomCodeRef.current = null;
     });
@@ -249,14 +348,15 @@ export function useSocket(): UseSocketReturn {
 
   /** Store session credentials and configure reconnect URL */
   const setSessionCredentials = useCallback((roomCode: string, token: string) => {
+    const normalizedRoomCode = roomCode.toUpperCase();
     tokenRef.current = token;
-    roomCodeRef.current = roomCode;
+    roomCodeRef.current = normalizedRoomCode;
     // Set reconnect URL to the room-specific endpoint (not /ws/create)
     wsRef.current?.setReconnectUrl(wsUrl(`/ws/reconnect?token=${encodeURIComponent(token)}`));
   }, []);
 
   // Detect app foreground/resume and force WebSocket reconnect
-  useAppLifecycle(wsRef, tokenRef);
+  useAppLifecycle(wsRef, tokenRef, roomCodeRef);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -363,32 +463,30 @@ export function useSocket(): UseSocketReturn {
   const reconnect = useCallback(async (
     roomCode: string,
     token: string
-  ): Promise<{ roomInfo: RoomInfo; gameState?: ClientGameState; playerId: string } | { error: string }> => {
+  ): Promise<ReconnectResult> => {
+    const normalizedRoomCode = roomCode.toUpperCase();
+    tokenRef.current = token;
+    roomCodeRef.current = normalizedRoomCode;
+    attachPendingRef.current = true;
+
     try {
       const ws = connectWs(`/ws/reconnect?token=${encodeURIComponent(token)}`);
+      ws.setReconnectUrl(wsUrl(`/ws/reconnect?token=${encodeURIComponent(token)}`));
       await waitForOpen(ws);
 
-      const response = await ws.request<any>('reconnect-to-room', {
-        roomCode, token,
-      });
-
-      if (response.success && response.roomInfo && response.playerId) {
-        setRoomInfo(response.roomInfo);
-        if (response.gameState) {
-          setGameState(response.gameState);
-        }
-        setSessionCredentials(roomCode.toUpperCase(), token);
-        return {
-          roomInfo: response.roomInfo,
-          gameState: response.gameState,
-          playerId: response.playerId,
-        };
+      const result = await reattachToRoom(ws, normalizedRoomCode, token);
+      if (!('error' in result)) {
+        setSessionCredentials(normalizedRoomCode, token);
       }
-      return { error: response.error || 'Failed to reconnect' };
+      return result;
     } catch (e) {
-      return { error: e instanceof Error ? e.message : 'Failed to reconnect' };
+      attachPendingRef.current = false;
+      return {
+        error: e instanceof Error ? e.message : 'Failed to reconnect',
+        terminal: false,
+      };
     }
-  }, [connectWs, setSessionCredentials]);
+  }, [connectWs, reattachToRoom, setSessionCredentials]);
 
   const leaveRoom = useCallback(() => {
     if (wsRef.current) {
@@ -396,6 +494,7 @@ export function useSocket(): UseSocketReturn {
       wsRef.current.close();
       wsRef.current = null;
     }
+    attachPendingRef.current = false;
     tokenRef.current = null;
     roomCodeRef.current = null;
     setRoomInfo(null);
@@ -444,7 +543,7 @@ export function useSocket(): UseSocketReturn {
   }, []);
 
   const updateRoomSettings = useCallback(async (
-    settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }
+    settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength; gameVariant?: GameVariant }
   ): Promise<{ success: boolean; error?: string }> => {
     if (!wsRef.current) return { success: false, error: 'Not connected to server' };
     try {

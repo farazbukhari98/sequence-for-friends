@@ -1,4 +1,3 @@
-import type { DurableObject } from 'cloudflare:workers';
 import type { Env } from './index.js';
 
 import type {
@@ -7,6 +6,7 @@ import type {
   GameState,
   TeamSwitchRequest,
 } from '../../shared/types.js';
+import { DEFAULT_GAME_VARIANT } from '../../shared/types.js';
 
 import type { ClientMessage } from './protocol.js';
 
@@ -30,6 +30,7 @@ import {
 } from './room-logic.js';
 
 import { applyMove, checkStalemate } from './rules/engine.js';
+import { getNextPlayerIndex } from './gameState.js';
 import { decideBotAction, getBotDelay } from './bot.js';
 import { insertGameHistory } from './db/queries.js';
 import type { DbGameHistory, DbGameParticipant } from './db/queries.js';
@@ -55,7 +56,9 @@ interface SerializedRoom {
   // Maps serialized as arrays of [key, value]
   lockedCells?: [number, string[]][];
   sequencesCompleted?: [number, number][];
+  teamScores?: [number, number][];
   sequenceTimestamps?: [number, number[]][];
+  scoreTimestamps?: [number, number[]][];
 }
 
 function serializeRoom(room: Room): SerializedRoom {
@@ -73,12 +76,16 @@ function serializeRoom(room: Room): SerializedRoom {
       ([k, v]) => [k, Array.from(v)]
     );
     result.sequencesCompleted = Array.from(gs.sequencesCompleted.entries());
+    result.teamScores = Array.from(gs.teamScores.entries());
     result.sequenceTimestamps = Array.from(gs.sequenceTimestamps.entries());
+    result.scoreTimestamps = Array.from(gs.scoreTimestamps.entries());
 
     // Null out Maps on the COPY only (not the live gameState)
     (result.room.gameState as any).lockedCells = null;
     (result.room.gameState as any).sequencesCompleted = null;
+    (result.room.gameState as any).teamScores = null;
     (result.room.gameState as any).sequenceTimestamps = null;
+    (result.room.gameState as any).scoreTimestamps = null;
   }
 
   return result;
@@ -86,13 +93,19 @@ function serializeRoom(room: Room): SerializedRoom {
 
 function deserializeRoom(data: SerializedRoom): Room {
   const room = data.room;
+  room.gameVariant ||= DEFAULT_GAME_VARIANT;
 
   if (room.gameState) {
+    room.gameState.config.gameVariant ||= room.gameVariant;
+    room.gameState.config.scoreToWin ||= room.gameState.config.sequencesToWin;
     room.gameState.lockedCells = new Map(
       (data.lockedCells || []).map(([k, v]) => [k, new Set(v)])
     );
     room.gameState.sequencesCompleted = new Map(data.sequencesCompleted || []);
+    room.gameState.teamScores = new Map(data.teamScores || data.sequencesCompleted || []);
+    room.gameState.kingZone ||= null;
     room.gameState.sequenceTimestamps = new Map(data.sequenceTimestamps || []);
+    room.gameState.scoreTimestamps = new Map(data.scoreTimestamps || data.sequenceTimestamps || []);
   }
 
   return room;
@@ -102,7 +115,7 @@ function deserializeRoom(data: SerializedRoom): Room {
 // ROOM DURABLE OBJECT
 // ============================================
 
-export class RoomDO implements DurableObject {
+export class RoomDO {
   private state: DurableObjectState;
   private env: Env;
 
@@ -352,7 +365,10 @@ export class RoomDO implements DurableObject {
       const currentPlayer = this.room.gameState.players[this.room.gameState.currentPlayerIndex];
       if (currentPlayer.id === playerId) {
         await this.clearTimer('turn-timeout');
-        await this.scheduleTimer('disconnect-skip', DISCONNECT_SKIP_MS);
+        const hasConnectedHuman = this.room.players.some(p => p.connected && !p.isBot);
+        if (hasConnectedHuman) {
+          await this.scheduleTimer('disconnect-skip', DISCONNECT_SKIP_MS);
+        }
       }
     }
 
@@ -543,6 +559,7 @@ export class RoomDO implements DurableObject {
       sequenceLength: this.room.sequenceLength,
       turnTimeLimit: this.room.turnTimeLimit,
       seriesLength: this.room.seriesLength,
+      gameVariant: this.room.gameVariant,
     };
     const modes = getActiveModes(settings);
     if (modes.length > 0) {
@@ -556,14 +573,22 @@ export class RoomDO implements DurableObject {
 
   private async handleReconnect(ws: WebSocket, msg: ClientMessage & { type: 'reconnect-to-room' }): Promise<void> {
     if (!this.room) {
-      this.sendResponse(ws, msg.id, { success: false, error: 'Room not found or expired' });
+      this.sendResponse(ws, msg.id, {
+        success: false,
+        error: 'Room not found or expired',
+        errorCode: 'ROOM_EXPIRED',
+      });
       return;
     }
 
     const { token } = msg.data;
     const player = this.room.players.find(p => p.token === token);
     if (!player) {
-      this.sendResponse(ws, msg.id, { success: false, error: 'Invalid token' });
+      this.sendResponse(ws, msg.id, {
+        success: false,
+        error: 'Invalid token',
+        errorCode: 'INVALID_TOKEN',
+      });
       return;
     }
 
@@ -589,10 +614,18 @@ export class RoomDO implements DurableObject {
     // Always cancel cleanup timer (any player reconnecting means room is alive)
     await this.clearTimer('cleanup');
 
-    // Only cancel disconnect-skip if the reconnecting player is the one whose turn it is
+    // Cancel any pending disconnect skip. Once a human reconnects, the room should stop
+    // carrying a stale skip timer that can race the recovered socket attachment.
+    await this.clearTimer('disconnect-skip');
+
     if (this.room.gameState &&
         this.room.gameState.players[this.room.gameState.currentPlayerIndex].id === player.id) {
-      await this.clearTimer('disconnect-skip');
+      if (this.room.gameState.turnTimeLimit > 0) {
+        this.room.gameState.turnStartedAt = Date.now();
+        await this.startTurnTimer();
+      }
+    } else if (this.room.gameState) {
+      this.scheduleBotTurnSync();
     }
 
     const roomInfo = toRoomInfo(this.room);
@@ -769,6 +802,7 @@ export class RoomDO implements DurableObject {
       sequenceLength: this.room.sequenceLength,
       turnTimeLimit: this.room.turnTimeLimit,
       seriesLength: this.room.seriesLength,
+      gameVariant: this.room.gameVariant,
     };
 
     const result = updateRoomSettings(this.room, playerId, msg.data);
@@ -785,6 +819,7 @@ export class RoomDO implements DurableObject {
       sequenceLength: this.room.sequenceLength,
       turnTimeLimit: this.room.turnTimeLimit,
       seriesLength: this.room.seriesLength,
+      gameVariant: this.room.gameVariant,
     };
     const modes = getActiveModes(newSettings);
     const oldModes = getActiveModes(oldSettings);
@@ -1080,7 +1115,8 @@ export class RoomDO implements DurableObject {
       // No pending draw — just advance turn manually
       gameState.deadCardReplacedThisTurn = false;
       gameState.lastRemovedCell = null;
-      gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+      gameState.currentPlayerIndex = getNextPlayerIndex(
+        gameState.currentPlayerIndex, gameState.players, gameState.config.teamCount);
 
       // Check stalemate even when no card was played — the board may already
       // be in stalemate from a previous move that wasn't checked
@@ -1113,14 +1149,12 @@ export class RoomDO implements DurableObject {
       // otherwise we'd loop forever skipping disconnected players
       const hasConnectedHuman = gameState.players.some(p => p.connected && !p.isBot);
       if (hasConnectedHuman) {
-        this.timers.push({ type: 'disconnect-skip', fireAt: Date.now() + DISCONNECT_SKIP_MS });
-        this.timers.sort((a, b) => a.fireAt - b.fireAt);
+        await this.scheduleTimer('disconnect-skip', DISCONNECT_SKIP_MS);
       }
     } else {
       // Start timer for next player
       if (gameState.turnTimeLimit > 0) {
-        this.timers.push({ type: 'turn-timeout', fireAt: Date.now() + gameState.turnTimeLimit * 1000 });
-        this.timers.sort((a, b) => a.fireAt - b.fireAt);
+        await this.startTurnTimer();
       }
       // Schedule bot turn
       this.scheduleBotTurnSync();
@@ -1182,7 +1216,8 @@ export class RoomDO implements DurableObject {
 
       if (!drawResult.success) {
         // Draw rejected (e.g. bot has no valid moves and no pending draw) — force-advance turn
-        gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+        gameState.currentPlayerIndex = getNextPlayerIndex(
+          gameState.currentPlayerIndex, gameState.players, gameState.config.teamCount);
         gameState.turnStartedAt = gameState.turnTimeLimit > 0 ? Date.now() : null;
         this.broadcastGameState();
         this.scheduleBotTurnSync();
@@ -1316,6 +1351,7 @@ export class RoomDO implements DurableObject {
       team_count: gs.config.teamCount,
       winning_team_idx: winnerTeamIndex,
       was_stalemate: wasStalemate ? 1 : 0,
+      game_variant: gs.config.gameVariant,
       sequence_length: gs.config.sequenceLength,
       sequences_to_win: gs.config.sequencesToWin,
       is_series_game: this.room.seriesState ? 1 : 0,
@@ -1367,7 +1403,7 @@ export class RoomDO implements DurableObject {
 
   // ========== MESSAGING HELPERS ==========
 
-  private sendTo(ws: WebSocket, msg: { type: string; data?: unknown }): void {
+  private sendTo(ws: WebSocket, msg: { type: string; id?: string; data?: unknown }): void {
     try {
       ws.send(JSON.stringify(msg));
     } catch {
@@ -1375,7 +1411,7 @@ export class RoomDO implements DurableObject {
     }
   }
 
-  private sendResponse(ws: WebSocket, id: string, data: Record<string, unknown>): void {
+  private sendResponse(ws: WebSocket, id: string, data: unknown): void {
     this.sendTo(ws, { type: 'response', id, data });
   }
 

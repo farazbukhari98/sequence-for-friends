@@ -4,6 +4,11 @@ import { Capacitor } from '@capacitor/core';
 import { useSocket } from './hooks/useSocket';
 import { useAuth } from './hooks/useAuth';
 import { usePush } from './hooks/usePush';
+import {
+  clearRoomSession,
+  getRoomSession,
+  saveRoomSession,
+} from './lib/storage';
 import { AuthScreen } from './redesign/components/AuthScreen';
 import { OnboardingScreen } from './redesign/components/OnboardingScreen';
 import { HomeScreen } from './redesign/components/HomeScreen';
@@ -15,13 +20,6 @@ import { Toast } from './components/Toast';
 import type { TurnTimeLimit, SequencesToWin, BotDifficulty, SequenceLength, SeriesLength } from '../../shared/types';
 
 type Screen = 'auth' | 'onboarding' | 'home' | 'profile' | 'friends' | 'lobby' | 'game';
-
-// Storage keys
-const STORAGE_KEYS = {
-  roomCode: 'sequence_room_code',
-  token: 'sequence_player_token',
-  playerId: 'sequence_player_id',
-};
 
 // Get room code from URL
 function getRoomCodeFromURL(): string | null {
@@ -100,37 +98,51 @@ function App() {
   // If credentials exist and user is authenticated, attempt reconnection.
   // Session is cleared explicitly on room-closed or intentional leave.
   useEffect(() => {
-    if (authLoading) return;
-    if (!isAuthenticated) {
-      // Not authenticated — clear any stale session
-      localStorage.removeItem(STORAGE_KEYS.roomCode);
-      localStorage.removeItem(STORAGE_KEYS.token);
-      localStorage.removeItem(STORAGE_KEYS.playerId);
-      return;
+    let cancelled = false;
+
+    if (authLoading || !isAuthenticated) {
+      return () => {
+        cancelled = true;
+      };
     }
 
-    const savedRoom = localStorage.getItem(STORAGE_KEYS.roomCode);
-    const savedToken = localStorage.getItem(STORAGE_KEYS.token);
-    const savedPlayerId = localStorage.getItem(STORAGE_KEYS.playerId);
+    void (async () => {
+      let savedSession = null;
+      try {
+        savedSession = await getRoomSession();
+      } catch {
+        return;
+      }
 
-    if (savedRoom && savedToken && savedPlayerId) {
-      setPlayerId(savedPlayerId);
-      reconnect(savedRoom, savedToken).then((result) => {
-        if ('error' in result) {
-          // Reconnect failed — stale session, clear it
+      if (!savedSession || cancelled) {
+        return;
+      }
+
+      setPlayerId(savedSession.playerId);
+      const result = await reconnect(savedSession.roomCode, savedSession.token);
+      if (cancelled) {
+        return;
+      }
+
+      if ('error' in result) {
+        if (result.terminal) {
           clearSession();
-        } else {
-          setPlayerId(result.playerId);
-          // Navigate to the correct screen based on game state
-          if (result.gameState && result.gameState.phase === 'playing') {
-            setScreen('game');
-          } else {
-            setScreen('lobby');
-          }
         }
-      });
-    }
-  }, [authLoading, isAuthenticated]);
+        return;
+      }
+
+      setPlayerId(result.playerId);
+      if (result.gameState && result.gameState.phase === 'playing') {
+        setScreen('game');
+      } else {
+        setScreen('lobby');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, reconnect]);
 
   // Listen for deep links (Universal Links / App Links)
   useEffect(() => {
@@ -180,6 +192,12 @@ function App() {
     }
   }, [gameState]);
 
+  useEffect(() => {
+    if (roomInfo && screen === 'home' && (!gameState || gameState.phase !== 'playing')) {
+      setScreen('lobby');
+    }
+  }, [gameState, roomInfo, screen]);
+
   // Handle room closed (host left or ended game)
   useEffect(() => {
     if (roomClosed) {
@@ -191,17 +209,17 @@ function App() {
 
   // Save session info
   const saveSession = (roomCode: string, token: string, pid: string) => {
-    localStorage.setItem(STORAGE_KEYS.roomCode, roomCode);
-    localStorage.setItem(STORAGE_KEYS.token, token);
-    localStorage.setItem(STORAGE_KEYS.playerId, pid);
+    void saveRoomSession({
+      roomCode,
+      token,
+      playerId: pid,
+    }).catch(() => {});
     setPlayerId(pid);
   };
 
   // Clear session info
   const clearSession = () => {
-    localStorage.removeItem(STORAGE_KEYS.roomCode);
-    localStorage.removeItem(STORAGE_KEYS.token);
-    localStorage.removeItem(STORAGE_KEYS.playerId);
+    void clearRoomSession().catch(() => {});
     setPlayerId(null);
   };
 

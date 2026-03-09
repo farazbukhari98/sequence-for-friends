@@ -15,6 +15,7 @@ function getPreferences() {
 
 const KEYS = {
   sessionToken: 'seq_session_token',
+  roomSession: 'seq_room_session',
   userId: 'seq_user_id',
   username: 'seq_username',
   displayName: 'seq_display_name',
@@ -46,6 +47,58 @@ export async function clearSessionToken(): Promise<void> {
     await prefs.remove({ key: KEYS.sessionToken });
   } else {
     localStorage.removeItem(KEYS.sessionToken);
+  }
+}
+
+export interface RoomSession {
+  roomCode: string;
+  token: string;
+  playerId: string;
+}
+
+export async function saveRoomSession(session: RoomSession): Promise<void> {
+  const prefs = getPreferences();
+  const data = JSON.stringify(session);
+  if (prefs) {
+    await prefs.set({ key: KEYS.roomSession, value: data });
+  } else {
+    localStorage.setItem(KEYS.roomSession, data);
+  }
+}
+
+export async function getRoomSession(): Promise<RoomSession | null> {
+  const prefs = getPreferences();
+  let data: string | null;
+  if (prefs) {
+    const { value } = await prefs.get({ key: KEYS.roomSession });
+    data = value;
+  } else {
+    data = localStorage.getItem(KEYS.roomSession);
+  }
+
+  if (!data) return null;
+
+  try {
+    const parsed = JSON.parse(data) as Partial<RoomSession>;
+    if (!parsed.roomCode || !parsed.token || !parsed.playerId) {
+      return null;
+    }
+    return {
+      roomCode: parsed.roomCode,
+      token: parsed.token,
+      playerId: parsed.playerId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearRoomSession(): Promise<void> {
+  const prefs = getPreferences();
+  if (prefs) {
+    await prefs.remove({ key: KEYS.roomSession });
+  } else {
+    localStorage.removeItem(KEYS.roomSession);
   }
 }
 

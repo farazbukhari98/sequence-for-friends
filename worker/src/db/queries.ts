@@ -53,6 +53,7 @@ export interface DbGameHistory {
   team_count: number;
   winning_team_idx: number | null;
   was_stalemate: number;
+  game_variant: string;
   sequence_length: number;
   sequences_to_win: number;
   is_series_game: number;
@@ -198,13 +199,13 @@ export async function insertGameHistory(
 ): Promise<void> {
   const stmts: D1PreparedStatement[] = [
     db.prepare(
-      `INSERT INTO game_history (id, room_code, started_at, ended_at, duration_ms, player_count, team_count, winning_team_idx, was_stalemate, sequence_length, sequences_to_win, is_series_game, series_id, bot_difficulty)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO game_history (id, room_code, started_at, ended_at, duration_ms, player_count, team_count, winning_team_idx, was_stalemate, game_variant, sequence_length, sequences_to_win, is_series_game, series_id, bot_difficulty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       game.id, game.room_code, game.started_at, game.ended_at, game.duration_ms,
       game.player_count, game.team_count, game.winning_team_idx, game.was_stalemate,
-      game.sequence_length, game.sequences_to_win, game.is_series_game, game.series_id,
-      game.bot_difficulty
+      game.game_variant, game.sequence_length, game.sequences_to_win, game.is_series_game,
+      game.series_id, game.bot_difficulty
     ),
   ];
 

@@ -1,6 +1,7 @@
 import './GameModeModal.css';
+import type { GameVariant } from '../../../shared/types';
 
-export type GameModeType = 'blitz' | 'speed-sequence' | 'series' | 'custom';
+export type GameModeType = 'blitz' | 'speed-sequence' | 'series' | 'king-of-the-board' | 'custom';
 
 interface GameModeInfo {
   title: string;
@@ -57,6 +58,21 @@ const GAME_MODE_INFO: Record<GameModeType, GameModeInfo> = {
       'Team composition stays the same throughout',
     ],
   },
+  'king-of-the-board': {
+    title: 'King of the Board',
+    icon: '👑',
+    description: 'Normal Sequence rules, but one shared 3x3 king zone turns certain sequences into 2-point swings.',
+    howToPlay: [
+      'The highlighted 3x3 king zone is the shared hotspot on the board',
+      'Normal sequences score 1 point, zone-touching sequences score 2 points',
+      'First team to 3 points wins, and the zone moves after every scoring move',
+    ],
+    tips: [
+      'Fight for the hotspot, but don\'t ignore easy 1-point lines elsewhere',
+      'One-eyed jacks are brutal when a team is building inside the zone',
+      'A double sequence can create a huge score swing in one move',
+    ],
+  },
   'custom': {
     title: 'Custom Game Mode',
     icon: '⚙️',
@@ -80,7 +96,9 @@ interface GameModeModalProps {
 
 export function GameModeModal({ modes, onAcknowledge, hostName }: GameModeModalProps) {
   // Prioritize showing the most significant mode
-  const primaryMode = modes.includes('speed-sequence')
+  const primaryMode = modes.includes('king-of-the-board')
+    ? 'king-of-the-board'
+    : modes.includes('speed-sequence')
     ? 'speed-sequence'
     : modes.includes('blitz')
       ? 'blitz'
@@ -151,11 +169,13 @@ export function getActiveModes(settings: {
   sequenceLength: number;
   turnTimeLimit: number;
   seriesLength: number;
+  gameVariant: GameVariant;
 }): GameModeType[] {
   const modes: GameModeType[] = [];
 
-  // Check for Speed Sequence (15s timer + Blitz)
-  if (settings.sequenceLength === 4 && settings.turnTimeLimit === 15) {
+  if (settings.gameVariant === 'king-of-the-board') {
+    modes.push('king-of-the-board');
+  } else if (settings.sequenceLength === 4 && settings.turnTimeLimit === 15) {
     modes.push('speed-sequence');
   } else if (settings.sequenceLength === 4) {
     modes.push('blitz');
@@ -173,6 +193,7 @@ export function hasSpecialModes(settings: {
   sequenceLength: number;
   turnTimeLimit: number;
   seriesLength: number;
+  gameVariant: GameVariant;
 }): boolean {
-  return settings.sequenceLength === 4 || settings.seriesLength > 0;
+  return settings.gameVariant === 'king-of-the-board' || settings.sequenceLength === 4 || settings.seriesLength > 0;
 }

@@ -29,6 +29,7 @@ export class SequenceWebSocket {
   private intentionalClose = false;
   private _connected = false;
   private hasConnectedOnce = false;
+  private connectionGeneration = 0;
 
   // Lifecycle callbacks
   onOpen: (() => void) | null = null;
@@ -58,14 +59,19 @@ export class SequenceWebSocket {
       ? this._reconnectUrl
       : this.url;
 
+    let socket: WebSocket;
     try {
-      this.ws = new WebSocket(targetUrl);
-    } catch (e) {
+      socket = new WebSocket(targetUrl);
+    } catch {
       this.scheduleReconnect();
       return;
     }
 
-    this.ws.onopen = () => {
+    const generation = ++this.connectionGeneration;
+    this.ws = socket;
+
+    socket.onopen = () => {
+      if (!this.isActiveSocket(socket, generation)) return;
       this._connected = true;
       const isReconnect = this.hasConnectedOnce;
       this.hasConnectedOnce = true;
@@ -77,7 +83,8 @@ export class SequenceWebSocket {
       this.onOpen?.();
     };
 
-    this.ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
+      if (!this.isActiveSocket(socket, generation)) return;
       try {
         const msg = JSON.parse(event.data);
         this.handleMessage(msg);
@@ -86,23 +93,20 @@ export class SequenceWebSocket {
       }
     };
 
-    this.ws.onclose = () => {
+    socket.onclose = () => {
+      if (!this.isActiveSocket(socket, generation)) return;
       this._connected = false;
       this.onClose?.();
 
-      // Reject all pending requests
-      for (const [id, pending] of this.pendingRequests) {
-        clearTimeout(pending.timeout);
-        pending.reject(new Error('Connection closed'));
-      }
-      this.pendingRequests.clear();
+      this.rejectPendingRequests('Connection closed');
 
       if (!this.intentionalClose) {
         this.scheduleReconnect();
       }
     };
 
-    this.ws.onerror = (e) => {
+    socket.onerror = (e) => {
+      if (!this.isActiveSocket(socket, generation)) return;
       this.onError?.(e);
     };
   }
@@ -131,6 +135,7 @@ export class SequenceWebSocket {
 
   private scheduleReconnect(): void {
     if (this.intentionalClose) return;
+    this.clearReconnectTimer();
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.onReconnectFailed?.();
       return;
@@ -140,8 +145,27 @@ export class SequenceWebSocket {
     this.reconnectAttempts++;
 
     this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       this.connect();
     }, delay);
+  }
+
+  private isActiveSocket(socket: WebSocket, generation: number): boolean {
+    return this.ws === socket && this.connectionGeneration === generation;
+  }
+
+  private clearReconnectTimer(): void {
+    if (!this.reconnectTimer) return;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+  }
+
+  private rejectPendingRequests(message: string): void {
+    for (const [, pending] of this.pendingRequests) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error(message));
+    }
+    this.pendingRequests.clear();
   }
 
   /**
@@ -200,29 +224,21 @@ export class SequenceWebSocket {
     if (this.intentionalClose) return;
     if (!this.hasConnectedOnce) return; // nothing to reconnect to
 
-    // Cancel any pending backoff timer
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    this.clearReconnectTimer();
 
     // Reset backoff so the reconnect is immediate
     this.reconnectAttempts = 0;
 
     // Close the existing socket (may be dead already after iOS suspend)
     if (this.ws) {
-      try { this.ws.close(1000, 'Force reconnect'); } catch {}
+      const currentWs = this.ws;
       this.ws = null;
+      try { currentWs.close(1000, 'Force reconnect'); } catch {}
     }
     this._connected = false;
     this.onClose?.();
 
-    // Reject pending requests — they'll be stale
-    for (const [, pending] of this.pendingRequests) {
-      clearTimeout(pending.timeout);
-      pending.reject(new Error('Force reconnect'));
-    }
-    this.pendingRequests.clear();
+    this.rejectPendingRequests('Force reconnect');
 
     // Immediately open a fresh connection
     this.connect();
@@ -233,21 +249,14 @@ export class SequenceWebSocket {
    */
   close(): void {
     this.intentionalClose = true;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    this.clearReconnectTimer();
     if (this.ws) {
-      this.ws.close(1000, 'Client closing');
+      const currentWs = this.ws;
       this.ws = null;
+      currentWs.close(1000, 'Client closing');
     }
     this._connected = false;
 
-    // Clean up pending requests
-    for (const [, pending] of this.pendingRequests) {
-      clearTimeout(pending.timeout);
-      pending.reject(new Error('Connection closed'));
-    }
-    this.pendingRequests.clear();
+    this.rejectPendingRequests('Connection closed');
   }
 }

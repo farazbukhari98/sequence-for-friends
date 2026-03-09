@@ -12,12 +12,14 @@ import {
   SequenceLength,
   SeriesLength,
   SeriesState,
+  GameVariant,
   BotDifficulty,
   DEFAULT_SEQUENCES_TO_WIN,
   DEFAULT_SEQUENCE_LENGTH,
   DEFAULT_SERIES_LENGTH,
+  DEFAULT_GAME_VARIANT,
 } from '../../shared/types.js';
-import { createGameConfig, initializeGame, assignTeams } from './gameState.js';
+import { createGameConfig, initializeGame, assignTeams, interleavePlayersByTeam } from './gameState.js';
 import { createBotPlayer, generateBotName } from './bot.js';
 
 /**
@@ -86,6 +88,7 @@ export function toRoomInfo(room: Room): RoomInfo {
     players: room.players.map(toPublicPlayer),
     maxPlayers: room.maxPlayers,
     teamCount: room.teamCount,
+    gameVariant: room.gameVariant,
     turnTimeLimit: room.turnTimeLimit,
     sequencesToWin: room.sequencesToWin,
     sequenceLength: room.sequenceLength,
@@ -111,6 +114,11 @@ export function toClientGameState(gameState: GameState, playerId: string): Clien
     sequencesCompletedArray.push(gameState.sequencesCompleted.get(i) || 0);
   }
 
+  const teamScoresArray: number[] = [];
+  for (let i = 0; i < gameState.config.teamCount; i++) {
+    teamScoresArray.push(gameState.teamScores.get(i) || 0);
+  }
+
   return {
     phase: gameState.phase,
     config: gameState.config,
@@ -121,7 +129,9 @@ export function toClientGameState(gameState: GameState, playerId: string): Clien
     boardChips: gameState.boardChips,
     lockedCells: lockedCellsArray,
     sequencesCompleted: sequencesCompletedArray,
+    teamScores: teamScoresArray,
     completedSequences: gameState.completedSequences,
+    kingZone: gameState.kingZone,
     myHand: player?.hand || [],
     myPlayerId: playerId,
     deadCardReplacedThisTurn: gameState.deadCardReplacedThisTurn,
@@ -148,7 +158,8 @@ export function createRoomData(
   turnTimeLimit: TurnTimeLimit = 0,
   sequencesToWin: SequencesToWin = DEFAULT_SEQUENCES_TO_WIN,
   sequenceLength: SequenceLength = DEFAULT_SEQUENCE_LENGTH,
-  seriesLength: SeriesLength = DEFAULT_SERIES_LENGTH
+  seriesLength: SeriesLength = DEFAULT_SERIES_LENGTH,
+  gameVariant: GameVariant = DEFAULT_GAME_VARIANT
 ): Room {
   if (!VALID_PLAYER_COUNTS.includes(maxPlayers)) {
     throw new Error(`Invalid player count: ${maxPlayers}. Valid counts: ${VALID_PLAYER_COUNTS.join(', ')}`);
@@ -176,6 +187,7 @@ export function createRoomData(
     players: [hostPlayer],
     maxPlayers,
     teamCount,
+    gameVariant,
     turnTimeLimit,
     sequencesToWin,
     sequenceLength,
@@ -275,7 +287,7 @@ export function kickPlayerFromRoom(room: Room, hostId: string, playerId: string)
 export function updateRoomSettings(
   room: Room,
   hostId: string,
-  settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }
+  settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength; gameVariant?: GameVariant }
 ): { error?: string } {
   if (room.hostId !== hostId) {
     return { error: 'Only the host can change settings' };
@@ -283,6 +295,24 @@ export function updateRoomSettings(
 
   if (room.phase !== 'waiting') {
     return { error: 'Cannot change settings after game started' };
+  }
+
+  if (settings.gameVariant !== undefined) {
+    if (!['classic', 'king-of-the-board'].includes(settings.gameVariant)) {
+      return { error: `Invalid game variant: ${settings.gameVariant}` };
+    }
+
+    if (settings.gameVariant === 'king-of-the-board') {
+      if (room.maxPlayers < 4) {
+        return { error: 'King of the Board requires rooms with at least 4 seats' };
+      }
+      if (room.players.some(player => player.isBot)) {
+        return { error: 'King of the Board is not available in bot games' };
+      }
+      room.sequenceLength = 5;
+    }
+
+    room.gameVariant = settings.gameVariant;
   }
 
   if (settings.turnTimeLimit !== undefined) {
@@ -299,6 +329,9 @@ export function updateRoomSettings(
   if (settings.sequenceLength !== undefined) {
     if (![4, 5].includes(settings.sequenceLength)) {
       return { error: `Invalid sequence length: ${settings.sequenceLength}. Must be 4 or 5` };
+    }
+    if (room.gameVariant === 'king-of-the-board' && settings.sequenceLength !== 5) {
+      return { error: 'King of the Board requires standard 5-chip sequences' };
     }
     room.sequenceLength = settings.sequenceLength;
   }
@@ -333,7 +366,17 @@ export function startGameInRoom(room: Room, hostId: string): GameState | { error
     return { error: 'All players must be ready to start' };
   }
 
-  const config = createGameConfig(room.players.length, room.sequencesToWin, room.sequenceLength);
+  if (room.gameVariant === 'king-of-the-board') {
+    if (room.players.length < 4) {
+      return { error: 'King of the Board requires at least 4 players to start' };
+    }
+    if (room.players.some(player => player.isBot)) {
+      return { error: 'King of the Board is not available in bot games' };
+    }
+  }
+
+  const config = createGameConfig(room.players.length, room.sequencesToWin, room.sequenceLength, room.gameVariant);
+  interleavePlayersByTeam(room.players, config.teamCount);
   const gameState = initializeGame(room.players, config, room.turnTimeLimit);
 
   if (room.seriesLength > 0 && !room.seriesState) {
@@ -394,7 +437,8 @@ export function continueSeriesInRoom(room: Room, hostId: string): GameState | { 
     return { error: 'Series over' };
   }
 
-  const config = createGameConfig(room.players.length, room.sequencesToWin, room.sequenceLength);
+  const config = createGameConfig(room.players.length, room.sequencesToWin, room.sequenceLength, room.gameVariant);
+  interleavePlayersByTeam(room.players, config.teamCount);
   const gameState = initializeGame(room.players, config, room.turnTimeLimit);
 
   room.gameState = gameState;
@@ -438,6 +482,10 @@ export function endSeriesInRoom(room: Room, hostId: string): { error?: string } 
  * Add a bot to the room
  */
 export function addBotToRoom(room: Room, difficulty: BotDifficulty): Player | { error: string } {
+  if (room.gameVariant === 'king-of-the-board') {
+    return { error: 'King of the Board is not available in bot games' };
+  }
+
   if (room.players.length >= room.maxPlayers) {
     return { error: 'Room is full' };
   }
@@ -513,10 +561,12 @@ export function switchPlayerTeam(room: Room, playerId: string, newTeamIndex: num
 /**
  * Determine active game modes
  */
-export function getActiveModes(settings: { sequenceLength: number; turnTimeLimit: number; seriesLength: number }): string[] {
+export function getActiveModes(settings: { sequenceLength: number; turnTimeLimit: number; seriesLength: number; gameVariant: GameVariant }): string[] {
   const modes: string[] = [];
 
-  if (settings.sequenceLength === 4 && settings.turnTimeLimit === 15) {
+  if (settings.gameVariant === 'king-of-the-board') {
+    modes.push('king-of-the-board');
+  } else if (settings.sequenceLength === 4 && settings.turnTimeLimit === 15) {
     modes.push('speed-sequence');
   } else if (settings.sequenceLength === 4) {
     modes.push('blitz');

@@ -149,6 +149,136 @@ function isValidSequenceOverlap(
   return nonCornerOverlap <= 1;
 }
 
+function countNonCornerCells(sequence: SequenceLine): number {
+  let count = 0;
+
+  for (const [row, col] of sequence.cells) {
+    if (!isCorner(row, col)) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+function countCornerCells(sequence: SequenceLine): number {
+  return sequence.cells.length - countNonCornerCells(sequence);
+}
+
+function getSequenceKey(sequence: SequenceLine): string {
+  const sortedCells = [...sequence.cells].sort((a, b) =>
+    a[0] === b[0] ? a[1] - b[1] : a[0] - b[0]
+  );
+
+  return sortedCells.map(([row, col]) => `${row},${col}`).join('|');
+}
+
+function countSharedNonCornerCells(a: SequenceLine, b: SequenceLine): number {
+  const cells = new Set<string>();
+
+  for (const [row, col] of a.cells) {
+    if (!isCorner(row, col)) {
+      cells.add(cellKey(row, col));
+    }
+  }
+
+  let shared = 0;
+  for (const [row, col] of b.cells) {
+    if (!isCorner(row, col) && cells.has(cellKey(row, col))) {
+      shared++;
+    }
+  }
+
+  return shared;
+}
+
+function isAllLocked(sequence: SequenceLine, lockedCells: Set<string>): boolean {
+  return sequence.cells.every(([row, col]) =>
+    lockedCells.has(cellKey(row, col)) || isCorner(row, col)
+  );
+}
+
+function compareIndexLists(a: number[], b: number[]): number {
+  const length = Math.min(a.length, b.length);
+
+  for (let i = 0; i < length; i++) {
+    if (a[i] !== b[i]) {
+      return a[i] - b[i];
+    }
+  }
+
+  return a.length - b.length;
+}
+
+function chooseBestSequenceSubset(candidates: SequenceLine[]): SequenceLine[] {
+  if (candidates.length <= 1) {
+    return candidates;
+  }
+
+  const totalMasks = 1 << candidates.length;
+  const nonCornerCounts = candidates.map(countNonCornerCells);
+  const cornerCounts = candidates.map(countCornerCells);
+
+  let bestIndices: number[] = [];
+  let bestSequenceCount = 0;
+  let bestNonCornerCells = -1;
+  let bestCornerCells = Infinity;
+
+  for (let mask = 1; mask < totalMasks; mask++) {
+    const selectedIndices: number[] = [];
+    let totalNonCornerCells = 0;
+    let totalCornerCells = 0;
+    let valid = true;
+
+    for (let i = 0; i < candidates.length; i++) {
+      if ((mask & (1 << i)) === 0) continue;
+
+      for (const previousIndex of selectedIndices) {
+        if (countSharedNonCornerCells(candidates[i], candidates[previousIndex]) > 1) {
+          valid = false;
+          break;
+        }
+      }
+
+      if (!valid) break;
+
+      selectedIndices.push(i);
+      totalNonCornerCells += nonCornerCounts[i];
+      totalCornerCells += cornerCounts[i];
+    }
+
+    if (!valid) continue;
+
+    const isBetter =
+      selectedIndices.length > bestSequenceCount ||
+      (
+        selectedIndices.length === bestSequenceCount &&
+        (
+          totalNonCornerCells > bestNonCornerCells ||
+          (
+            totalNonCornerCells === bestNonCornerCells &&
+            (
+              totalCornerCells < bestCornerCells ||
+              (
+                totalCornerCells === bestCornerCells &&
+                compareIndexLists(selectedIndices, bestIndices) < 0
+              )
+            )
+          )
+        )
+      );
+
+    if (isBetter) {
+      bestIndices = selectedIndices;
+      bestSequenceCount = selectedIndices.length;
+      bestNonCornerCells = totalNonCornerCells;
+      bestCornerCells = totalCornerCells;
+    }
+  }
+
+  return bestIndices.map(index => candidates[index]);
+}
+
 /**
  * Find all valid new sequences that pass through a newly placed chip
  */
@@ -163,15 +293,11 @@ export function detectNewSequences(
   sequenceLength: SequenceLength = DEFAULT_SEQUENCE_LENGTH
 ): SequenceLine[] {
   const potentialSequences = getSequencesThroughCell(boardChips, targetRow, targetCol, teamIndex, sequenceLength);
-
   const newSequences: SequenceLine[] = [];
+  const seenKeys = new Set<string>();
 
   for (const seq of potentialSequences) {
-    const allLocked = seq.cells.every(([r, c]) =>
-      lockedCells.has(cellKey(r, c)) || isCorner(r, c)
-    );
-
-    if (allLocked) continue;
+    if (isAllLocked(seq, lockedCells)) continue;
 
     if (sequencesCompleted > 0) {
       if (!isValidSequenceOverlap(seq, lockedCells)) {
@@ -179,26 +305,15 @@ export function detectNewSequences(
       }
     }
 
-    newSequences.push(seq);
-  }
-
-  // Remove duplicate sequences
-  const uniqueSequences: SequenceLine[] = [];
-  const seenKeys = new Set<string>();
-
-  for (const seq of newSequences) {
-    const sortedCells = [...seq.cells].sort((a, b) =>
-      a[0] === b[0] ? a[1] - b[1] : a[0] - b[0]
-    );
-    const key = sortedCells.map(([r, c]) => `${r},${c}`).join('|');
+    const key = getSequenceKey(seq);
 
     if (!seenKeys.has(key)) {
       seenKeys.add(key);
-      uniqueSequences.push(seq);
+      newSequences.push(seq);
     }
   }
 
-  return uniqueSequences;
+  return chooseBestSequenceSubset(newSequences);
 }
 
 /**

@@ -21,6 +21,8 @@ import {
 
 import { drawCard, reshuffleDiscards } from './deck.js';
 import { detectNewSequences, isCellLocked, lockSequenceCells } from './sequences.js';
+import { getNextPlayerIndex } from '../gameState.js';
+import { getNextKingZone, getSequenceScore } from './kingOfTheBoard.js';
 
 /**
  * Create a game event for the activity log
@@ -33,6 +35,9 @@ function createGameEvent(
     position?: [number, number];
     targetTeamIndex?: number;
     sequenceCount?: number;
+    pointsAwarded?: number;
+    totalScore?: number;
+    usedKingZone?: boolean;
   }
 ): GameEvent {
   return {
@@ -343,20 +348,21 @@ function canTeamCompleteSequence(
  * Check if stalemate has occurred
  */
 export function checkStalemate(gameState: GameState): StalemateResult {
-  const { config, boardChips, lockedCells, sequencesCompleted, sequenceTimestamps } = gameState;
+  const { config, boardChips, lockedCells, sequencesCompleted, teamScores, scoreTimestamps } = gameState;
   const teamCount = config.teamCount;
   const sequenceLength = config.sequenceLength;
 
-  const sequenceCounts: number[] = [];
+  const scoreCounts: number[] = [];
   for (let i = 0; i < teamCount; i++) {
-    sequenceCounts.push(sequencesCompleted.get(i) || 0);
+    scoreCounts.push(teamScores.get(i) || 0);
   }
 
   let canAnyTeamScore = false;
 
   for (let teamIndex = 0; teamIndex < teamCount; teamIndex++) {
     const completed = sequencesCompleted.get(teamIndex) || 0;
-    if (completed >= config.sequencesToWin) continue;
+    const score = teamScores.get(teamIndex) || 0;
+    if (score >= config.scoreToWin) continue;
 
     const teamLockedCells = lockedCells.get(teamIndex) || new Set<string>();
 
@@ -370,27 +376,27 @@ export function checkStalemate(gameState: GameState): StalemateResult {
     return { isStalemate: false };
   }
 
-  const maxSequences = Math.max(...sequenceCounts);
+  const maxScore = Math.max(...scoreCounts);
 
-  if (maxSequences === 0) {
+  if (maxScore === 0) {
     return {
       isStalemate: true,
       winnerTeamIndex: 0,
       reason: 'highest_count',
-      sequenceCounts,
+      scoreCounts,
     };
   }
 
-  const teamsWithMax = sequenceCounts
+  const teamsWithMax = scoreCounts
     .map((count, index) => ({ count, index }))
-    .filter(t => t.count === maxSequences);
+    .filter(t => t.count === maxScore);
 
   if (teamsWithMax.length === 1) {
     return {
       isStalemate: true,
       winnerTeamIndex: teamsWithMax[0].index,
       reason: 'highest_count',
-      sequenceCounts,
+      scoreCounts,
     };
   }
 
@@ -398,8 +404,8 @@ export function checkStalemate(gameState: GameState): StalemateResult {
   let winnerIndex = teamsWithMax[0].index;
 
   for (const team of teamsWithMax) {
-    const timestamps = sequenceTimestamps.get(team.index) || [];
-    const timeToReachMax = timestamps[maxSequences - 1] || Infinity;
+    const timestamps = scoreTimestamps.get(team.index) || [];
+    const timeToReachMax = timestamps[maxScore - 1] || Infinity;
     if (timeToReachMax < earliestTime) {
       earliestTime = timeToReachMax;
       winnerIndex = team.index;
@@ -410,7 +416,7 @@ export function checkStalemate(gameState: GameState): StalemateResult {
     isStalemate: true,
     winnerTeamIndex: winnerIndex,
     reason: 'first_to_reach',
-    sequenceCounts,
+    scoreCounts,
   };
 }
 
@@ -447,8 +453,8 @@ export function applyMove(
     gameState.deadCardReplacedThisTurn = false;
     gameState.lastRemovedCell = null;
 
-    gameState.currentPlayerIndex =
-      (gameState.currentPlayerIndex + 1) % gameState.players.length;
+    gameState.currentPlayerIndex = getNextPlayerIndex(
+      gameState.currentPlayerIndex, gameState.players, gameState.config.teamCount);
 
     if (gameState.phase === 'playing') {
       const stalemateResult = checkStalemate(gameState);
@@ -538,13 +544,23 @@ export function applyMove(
     );
 
     if (newSequences.length > 0) {
+      const scoringZone = gameState.kingZone;
+      let pointsAwarded = 0;
+      let usedKingZone = false;
+
       for (const sequence of newSequences) {
         lockSequenceCells(gameState.lockedCells, sequence);
         gameState.completedSequences.push(sequence);
+
+        const score = getSequenceScore(sequence, scoringZone);
+        pointsAwarded += score.points;
+        usedKingZone = usedKingZone || score.usedKingZone;
       }
 
       const newCount = (gameState.sequencesCompleted.get(player.teamIndex) || 0) + newSequences.length;
       gameState.sequencesCompleted.set(player.teamIndex, newCount);
+      const newScore = (gameState.teamScores.get(player.teamIndex) || 0) + pointsAwarded;
+      gameState.teamScores.set(player.teamIndex, newScore);
 
       const timestamps = gameState.sequenceTimestamps.get(player.teamIndex) || [];
       for (let i = 0; i < newSequences.length; i++) {
@@ -552,17 +568,34 @@ export function applyMove(
       }
       gameState.sequenceTimestamps.set(player.teamIndex, timestamps);
 
+      const scoreTimestamps = gameState.scoreTimestamps.get(player.teamIndex) || [];
+      for (let i = 0; i < pointsAwarded; i++) {
+        scoreTimestamps.push(Date.now());
+      }
+      gameState.scoreTimestamps.set(player.teamIndex, scoreTimestamps);
+
       result.newSequences = newSequences;
+      result.scoring = {
+        pointsAwarded,
+        totalScore: newScore,
+        usedKingZone,
+        sequenceCount: newCount,
+      };
 
       logEvent(gameState, createGameEvent('sequence-completed', player, {
         sequenceCount: newCount,
+        pointsAwarded,
+        totalScore: newScore,
+        usedKingZone,
       }));
 
-      if (newCount >= gameState.config.sequencesToWin) {
+      if (newScore >= gameState.config.scoreToWin) {
         gameState.winnerTeamIndex = player.teamIndex;
         gameState.phase = 'finished';
         result.gameOver = true;
         result.winnerTeamIndex = player.teamIndex;
+      } else if (gameState.config.gameVariant === 'king-of-the-board') {
+        gameState.kingZone = getNextKingZone(scoringZone?.id ?? null);
       }
     }
   }

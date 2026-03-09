@@ -162,32 +162,28 @@ In 2-sequence mode, your second sequence can share **at most 1 chip** from your 
 
 ## iOS Development
 
-The iOS app is built with Capacitor. When syncing native plugins, **always use the wrapper scripts** instead of `npx cap sync` directly:
+The iOS release path is now **native SwiftUI**. The app target no longer links the old Capacitor bridge package, and Capacitor is no longer part of the iOS runtime or TestFlight source of truth.
+
+### Native Runtime Notes
 
 ```bash
-cd client
-npm run cap:sync        # Sync all platforms
-npm run cap:sync:ios    # Sync iOS only
+xcodebuild -project client/ios/App/App.xcodeproj -scheme App \
+  -destination "platform=iOS Simulator,name=iPhone 17" build
 ```
 
-**Why:** `npx cap sync` regenerates `capacitor.config.json` and strips out custom native plugin registrations (like `SignInWithApplePlugin`). The wrapper scripts run a patch afterward to re-add them.
+- Do not use `npm run cap:sync` as part of the native release process.
+- Do not depend on bundled web assets for the iOS runtime.
+- Push permission is user-triggered after sign-in, not requested at launch.
+- Reinstall/regression validation must include uninstall -> reinstall -> Sign in with Apple on the same build.
 
 ### Building for TestFlight
 
 ```bash
-cd client
-npm run build                                    # Build web assets
-npm run cap:sync:ios                             # Sync to iOS (with patch)
-cd ios/App
-agvtool new-version -all <next_build_number>     # Bump build number
-xcodebuild -project App.xcodeproj -scheme App -configuration Release \
-  -archivePath /tmp/SequenceForFriends.xcarchive archive \
-  DEVELOPMENT_TEAM=469Q8Z675Y CODE_SIGN_STYLE=Automatic \
-  -allowProvisioningUpdates -destination "generic/platform=iOS"
-xcodebuild -exportArchive -archivePath /tmp/SequenceForFriends.xcarchive \
-  -exportPath /tmp/SequenceForFriendsExport \
-  -exportOptionsPlist ../../ExportOptions.plist -allowProvisioningUpdates
+cd client/ios/App
+./scripts/archive-testflight.sh
 ```
+
+See [`docs/native-testflight-runbook.md`](/Users/farazbukhari/Documents/SequenceForFriends/docs/native-testflight-runbook.md) for the full release checklist, including reconnect and reinstall auth regression gates.
 
 ## Known Limitations
 

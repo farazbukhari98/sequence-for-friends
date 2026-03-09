@@ -137,6 +137,17 @@ export interface SequenceLine {
   teamIndex: number;
 }
 
+export type GameVariant = 'classic' | 'king-of-the-board';
+
+export const DEFAULT_GAME_VARIANT: GameVariant = 'classic';
+export const KING_OF_THE_BOARD_SCORE_TO_WIN = 3;
+
+export interface KingZone {
+  id: string;
+  center: [number, number];
+  cells: [number, number][];
+}
+
 export type GamePhase = 'lobby' | 'cutting' | 'playing' | 'finished';
 
 // ============================================
@@ -224,6 +235,9 @@ export interface GameEvent {
   position?: [number, number];
   targetTeamIndex?: number;
   sequenceCount?: number;
+  pointsAwarded?: number;
+  totalScore?: number;
+  usedKingZone?: boolean;
 }
 
 // ============================================
@@ -234,14 +248,16 @@ export interface StalemateResult {
   isStalemate: boolean;
   winnerTeamIndex?: number;
   reason?: 'highest_count' | 'first_to_reach';
-  sequenceCounts?: number[];
+  scoreCounts?: number[];
 }
 
 export interface GameConfig {
   playerCount: number;
   teamCount: number; // 2 or 3
   teamColors: TeamColor[];
+  gameVariant: GameVariant;
   sequencesToWin: number; // configurable: 2, 3, or 4
+  scoreToWin: number;
   sequenceLength: SequenceLength; // 4 for Blitz, 5 for standard
   handSize: number;
 }
@@ -291,7 +307,9 @@ export interface GameState {
   boardChips: BoardChips;
   lockedCells: Map<number, Set<string>>; // teamIndex -> set of "row,col"
   sequencesCompleted: Map<number, number>; // teamIndex -> count
+  teamScores: Map<number, number>; // teamIndex -> points
   completedSequences: SequenceLine[]; // All completed sequences
+  kingZone: KingZone | null;
 
   // Turn state
   deadCardReplacedThisTurn: boolean;
@@ -313,6 +331,7 @@ export interface GameState {
 
   // Sequence timestamps for stalemate tie-breaker
   sequenceTimestamps: Map<number, number[]>; // teamIndex -> [timestamp for seq 1, seq 2, ...]
+  scoreTimestamps: Map<number, number[]>; // teamIndex -> [timestamp for point 1, point 2, ...]
 
   // Activity log
   eventLog: GameEvent[];
@@ -335,6 +354,7 @@ export interface Room {
   players: Player[];
   maxPlayers: number;
   teamCount: number;
+  gameVariant: GameVariant;
   turnTimeLimit: TurnTimeLimit;
   sequencesToWin: SequencesToWin; // configurable: 2, 3, or 4
   sequenceLength: SequenceLength; // 4 for Blitz, 5 for standard
@@ -353,6 +373,7 @@ export interface RoomInfo {
   players: PublicPlayer[];
   maxPlayers: number;
   teamCount: number;
+  gameVariant: GameVariant;
   turnTimeLimit: TurnTimeLimit;
   sequencesToWin: SequencesToWin; // configurable: 2, 3, or 4
   sequenceLength: SequenceLength; // 4 for Blitz, 5 for standard
@@ -395,6 +416,12 @@ export interface MoveResult {
   action?: GameAction;
   playerId?: string;
   newSequences?: SequenceLine[];
+  scoring?: {
+    pointsAwarded: number;
+    totalScore: number;
+    usedKingZone: boolean;
+    sequenceCount: number;
+  };
   gameOver?: boolean;
   winnerTeamIndex?: number;
   stalemate?: StalemateResult; // Added for stalemate detection
@@ -444,7 +471,7 @@ export interface ClientToServerEvents {
   'kick-player': (playerId: string) => void;
   'game-action': (action: GameAction, callback: (response: MoveResult) => void) => void;
   'reconnect-to-room': (data: { roomCode: string; token: string }, callback: (response: ReconnectResponse) => void) => void;
-  'update-room-settings': (data: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }, callback: (response: { success: boolean; error?: string }) => void) => void;
+  'update-room-settings': (data: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength; gameVariant?: GameVariant }, callback: (response: { success: boolean; error?: string }) => void) => void;
   'toggle-ready': (callback: (response: { success: boolean; error?: string }) => void) => void;
   'request-team-switch': (toTeamIndex: number, callback: (response: { success: boolean; error?: string }) => void) => void;
   'respond-team-switch': (data: { playerId: string; approved: boolean }, callback: (response: { success: boolean; error?: string }) => void) => void;
@@ -469,7 +496,7 @@ export interface ServerToClientEvents {
   'turn-timeout': (data: { playerIndex: number; playerName: string }) => void;
   'team-switch-request': (request: TeamSwitchRequest) => void;
   'team-switch-response': (data: { playerId: string; approved: boolean; playerName: string }) => void;
-  'game-mode-changed': (data: { modes: string[]; changedBy: string; settings: { sequenceLength: number; turnTimeLimit: number; seriesLength: number } }) => void;
+  'game-mode-changed': (data: { modes: string[]; changedBy: string; settings: { sequenceLength: number; turnTimeLimit: number; seriesLength: number; gameVariant: GameVariant } }) => void;
   'emote-received': (data: EmoteData) => void;
   'quick-message-received': (data: QuickMessageData) => void;
   'room-closed': (reason: string) => void;
@@ -497,12 +524,15 @@ export interface StartGameResponse {
   error?: string;
 }
 
+export type ReconnectErrorCode = 'INVALID_TOKEN' | 'ROOM_EXPIRED';
+
 export interface ReconnectResponse {
   success: boolean;
   roomInfo?: RoomInfo;
   gameState?: ClientGameState;
   playerId?: string;
   error?: string;
+  errorCode?: ReconnectErrorCode;
 }
 
 // Client-side game state (with player's own hand)
@@ -516,7 +546,9 @@ export interface ClientGameState {
   boardChips: BoardChips;
   lockedCells: string[][]; // Per team, array of "row,col" strings
   sequencesCompleted: number[]; // Per team
+  teamScores: number[]; // Per team
   completedSequences: SequenceLine[];
+  kingZone: KingZone | null;
   myHand: CardCode[];
   myPlayerId: string;
   deadCardReplacedThisTurn: boolean;

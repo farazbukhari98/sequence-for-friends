@@ -18,7 +18,7 @@ export const BOT_NAMES = [
   'Echo', 'Flair', 'Pixel', 'Bolt', 'Spark', 'Coda', 'Rune', 'Flux',
 ];
 import { isDeadCard, getLegalTargets } from './rules/engine.js';
-import { getSequencesThroughCell } from './rules/sequences.js';
+import { detectNewSequences } from './rules/sequences.js';
 
 /**
  * Create a bot player
@@ -184,22 +184,18 @@ function scoreMoveBasic(action: GameAction, gameState: GameState, botPlayer: Pla
 
   const teamLockedCells = lockedCells.get(teamIndex) || new Set<string>();
   const teamSequences = sequencesCompleted.get(teamIndex) || 0;
-  const newSeqs = getSequencesThroughCell(tempBoard, targetRow, targetCol, teamIndex, config.sequenceLength);
+  const newSeqs = detectNewSequences(
+    tempBoard,
+    targetRow,
+    targetCol,
+    teamIndex,
+    teamLockedCells,
+    teamSequences,
+    config.sequencesToWin,
+    config.sequenceLength
+  );
 
   for (const seq of newSeqs) {
-    const allLocked = seq.cells.every(([r, c]) =>
-      teamLockedCells.has(cellKey(r, c)) || isCorner(r, c)
-    );
-    if (allLocked) continue;
-
-    if (teamSequences > 0) {
-      let overlap = 0;
-      for (const [r, c] of seq.cells) {
-        if (!isCorner(r, c) && teamLockedCells.has(cellKey(r, c))) overlap++;
-      }
-      if (overlap > 1) continue;
-    }
-
     score += 10000;
     break;
   }
@@ -244,7 +240,18 @@ function scoreRemoval(row: number, col: number, gameState: GameState, botPlayer:
   const adjCount = countAdjacentFriendly(row, col, opponentTeam, boardChips);
   score += adjCount * 150;
 
-  const opponentSeqs = getSequencesThroughCell(boardChips, row, col, opponentTeam, config.sequenceLength);
+  const opponentLocked = gameState.lockedCells.get(opponentTeam) || new Set<string>();
+  const opponentCompleted = gameState.sequencesCompleted.get(opponentTeam) || 0;
+  const opponentSeqs = detectNewSequences(
+    boardChips,
+    row,
+    col,
+    opponentTeam,
+    opponentLocked,
+    opponentCompleted,
+    config.sequencesToWin,
+    config.sequenceLength
+  );
   for (const seq of opponentSeqs) {
     const filled = seq.cells.filter(([r, c]) =>
       boardChips[r][c] === opponentTeam || isCorner(r, c)
@@ -273,7 +280,18 @@ function scoreOpponentBlocking(row: number, col: number, gameState: GameState, b
   for (const oppTeam of opponentTeams) {
     const tempBoard = boardChips.map(r => [...r]);
     tempBoard[row][col] = oppTeam;
-    const oppSeqs = getSequencesThroughCell(tempBoard, row, col, oppTeam, config.sequenceLength);
+    const oppLocked = gameState.lockedCells.get(oppTeam) || new Set<string>();
+    const oppCompleted = gameState.sequencesCompleted.get(oppTeam) || 0;
+    const oppSeqs = detectNewSequences(
+      tempBoard,
+      row,
+      col,
+      oppTeam,
+      oppLocked,
+      oppCompleted,
+      config.sequencesToWin,
+      config.sequenceLength
+    );
 
     for (const seq of oppSeqs) {
       const filled = seq.cells.filter(([r, c]) =>
@@ -480,22 +498,19 @@ function scoreMoveImpossible(
   // --- Priority 1: Sequence completion ---
   const teamLocked = lockedCells.get(teamIndex) || new Set<string>();
   const teamSeqs = sequencesCompleted.get(teamIndex) || 0;
-  const newSeqs = getSequencesThroughCell(tempBoard, targetRow, targetCol, teamIndex, seqLen);
+  const newSeqs = detectNewSequences(
+    tempBoard,
+    targetRow,
+    targetCol,
+    teamIndex,
+    teamLocked,
+    teamSeqs,
+    config.sequencesToWin,
+    config.sequenceLength
+  );
   let completesSequence = false;
 
   for (const seq of newSeqs) {
-    const allLocked = seq.cells.every(([r, c]) =>
-      teamLocked.has(cellKey(r, c)) || isCorner(r, c)
-    );
-    if (allLocked) continue;
-    if (teamSeqs > 0) {
-      let overlap = 0;
-      for (const [r, c] of seq.cells) {
-        if (!isCorner(r, c) && teamLocked.has(cellKey(r, c))) overlap++;
-      }
-      if (overlap > 1) continue;
-    }
-    // Valid new sequence!
     if (teamSeqs + 1 >= config.sequencesToWin) {
       score += 500000; // Game-winning
     } else {
@@ -513,21 +528,18 @@ function scoreMoveImpossible(
     // Check if opponent would complete a sequence through this cell
     const oppTempBoard = boardChips.map(row => [...row]);
     oppTempBoard[targetRow][targetCol] = oppTeam;
-    const oppNewSeqs = getSequencesThroughCell(oppTempBoard, targetRow, targetCol, oppTeam, seqLen);
+    const oppNewSeqs = detectNewSequences(
+      oppTempBoard,
+      targetRow,
+      targetCol,
+      oppTeam,
+      oppLocked,
+      oppSeqs,
+      config.sequencesToWin,
+      config.sequenceLength
+    );
 
     for (const seq of oppNewSeqs) {
-      const allLocked = seq.cells.every(([r, c]) =>
-        oppLocked.has(cellKey(r, c)) || isCorner(r, c)
-      );
-      if (allLocked) continue;
-      if (oppSeqs > 0) {
-        let overlap = 0;
-        for (const [r, c] of seq.cells) {
-          if (!isCorner(r, c) && oppLocked.has(cellKey(r, c))) overlap++;
-        }
-        if (overlap > 1) continue;
-      }
-      // Opponent could complete a sequence here
       const filled = seq.cells.filter(([r, c]) =>
         boardChips[r][c] === oppTeam || isCorner(r, c)
       ).length;

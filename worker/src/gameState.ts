@@ -13,11 +13,15 @@ import {
   TurnTimeLimit,
   SequencesToWin,
   SequenceLength,
+  GameVariant,
   DEFAULT_SEQUENCES_TO_WIN,
   DEFAULT_SEQUENCE_LENGTH,
+  DEFAULT_GAME_VARIANT,
+  KING_OF_THE_BOARD_SCORE_TO_WIN,
 } from '../../shared/types.js';
 
 import { createDeck, shuffleDeck, dealCards, cutCard } from './rules/deck.js';
+import { getInitialKingZone } from './rules/kingOfTheBoard.js';
 
 /**
  * Create the initial game configuration based on player count
@@ -25,18 +29,26 @@ import { createDeck, shuffleDeck, dealCards, cutCard } from './rules/deck.js';
 export function createGameConfig(
   playerCount: number,
   sequencesToWin?: SequencesToWin,
-  sequenceLength?: SequenceLength
+  sequenceLength?: SequenceLength,
+  gameVariant: GameVariant = DEFAULT_GAME_VARIANT
 ): GameConfig {
   const teamCount = getTeamCount(playerCount);
   const teamColors = teamCount === 2 ? TEAM_COLORS_2 : TEAM_COLORS_3;
   const handSize = HAND_SIZES[playerCount];
+  const effectiveSequenceLength = gameVariant === 'king-of-the-board'
+    ? 5
+    : (sequenceLength ?? DEFAULT_SEQUENCE_LENGTH);
 
   return {
     playerCount,
     teamCount,
     teamColors,
+    gameVariant,
     sequencesToWin: sequencesToWin ?? DEFAULT_SEQUENCES_TO_WIN,
-    sequenceLength: sequenceLength ?? DEFAULT_SEQUENCE_LENGTH,
+    scoreToWin: gameVariant === 'king-of-the-board'
+      ? KING_OF_THE_BOARD_SCORE_TO_WIN
+      : (sequencesToWin ?? DEFAULT_SEQUENCES_TO_WIN),
+    sequenceLength: effectiveSequenceLength,
     handSize,
   };
 }
@@ -94,6 +106,10 @@ export function initializeGame(
   }
 
   const currentPlayerIndex = (dealerIndex + 1) % players.length;
+  const teamScores = new Map<number, number>();
+  for (let i = 0; i < config.teamCount; i++) {
+    teamScores.set(i, 0);
+  }
 
   return {
     phase: 'playing',
@@ -105,7 +121,9 @@ export function initializeGame(
     boardChips: createEmptyBoard(),
     lockedCells: new Map(),
     sequencesCompleted: new Map(),
+    teamScores,
     completedSequences: [],
+    kingZone: config.gameVariant === 'king-of-the-board' ? getInitialKingZone() : null,
     deadCardReplacedThisTurn: false,
     pendingDraw: false,
     lastRemovedCell: null,
@@ -115,6 +133,7 @@ export function initializeGame(
     turnTimeLimit,
     turnStartedAt: turnTimeLimit > 0 ? Date.now() : null,
     sequenceTimestamps: new Map(),
+    scoreTimestamps: new Map(),
     eventLog: [],
     firstPlayerId: players[currentPlayerIndex]?.id || null,
   };
@@ -131,4 +150,68 @@ export function assignTeams(players: Player[], teamCount: number): void {
     players[i].teamIndex = i % teamCount;
     players[i].teamColor = teamColors[i % teamCount];
   }
+}
+
+/**
+ * Reorder players in-place so teams alternate (A,B,A,B or A,B,C,A,B,C).
+ * Updates seatIndex to match new positions.
+ */
+export function interleavePlayersByTeam(players: Player[], teamCount: number): void {
+  const teams: Player[][] = Array.from({ length: teamCount }, () => []);
+  for (const p of players) {
+    teams[p.teamIndex].push(p);
+  }
+  let idx = 0;
+  const maxSize = Math.max(...teams.map(t => t.length));
+  for (let round = 0; round < maxSize; round++) {
+    for (let t = 0; t < teamCount; t++) {
+      if (round < teams[t].length) {
+        players[idx] = teams[t][round];
+        players[idx].seatIndex = idx;
+        idx++;
+      }
+    }
+  }
+}
+
+/**
+ * Find the next player index ensuring teams alternate turns.
+ * Tries the next team in rotation, finds the nearest connected player on that team.
+ * Falls back to any connected player if all other teams are disconnected.
+ */
+export function getNextPlayerIndex(
+  currentIndex: number,
+  players: { teamIndex: number; connected: boolean; isBot?: boolean }[],
+  teamCount: number
+): number {
+  const n = players.length;
+  if (n <= 1) return 0;
+  const currentTeam = players[currentIndex].teamIndex;
+
+  // Try teams in rotation order (next team first, then subsequent)
+  for (let t = 1; t <= teamCount; t++) {
+    const targetTeam = (currentTeam + t) % teamCount;
+    if (targetTeam === currentTeam) continue;
+
+    // Find nearest connected player on this team, scanning forward
+    for (let i = 1; i < n; i++) {
+      const idx = (currentIndex + i) % n;
+      const p = players[idx];
+      if (p.teamIndex === targetTeam && (p.connected || p.isBot)) {
+        return idx;
+      }
+    }
+  }
+
+  // Fallback: any connected player (all other teams disconnected)
+  for (let i = 1; i < n; i++) {
+    const idx = (currentIndex + i) % n;
+    const p = players[idx];
+    if (p.connected || p.isBot) {
+      return idx;
+    }
+  }
+
+  // No one connected, advance normally (will trigger disconnect-skip)
+  return (currentIndex + 1) % n;
 }

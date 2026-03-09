@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
-import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, SequenceLength, SeriesLength, TeamSwitchRequest, BotDifficulty } from '../../../../shared/types';
+import type { RoomInfo, PublicPlayer, TurnTimeLimit, SequencesToWin, SequenceLength, SeriesLength, TeamSwitchRequest, BotDifficulty, GameVariant } from '../../../../shared/types';
 import { getTeamColorHex, getTeamLetter, VALID_PLAYER_COUNTS, TURN_TIME_OPTIONS, SEQUENCES_TO_WIN_OPTIONS, SEQUENCE_LENGTH_OPTIONS, SERIES_LENGTH_OPTIONS } from '../../../../shared/types';
 import { GameModeModal } from '../../components/GameModeModal';
 import type { GameModeType } from '../../components/GameModeModal';
@@ -19,7 +19,7 @@ interface LobbyScreenProps {
   onKickPlayer: (playerId: string) => void;
   onAddBot: (difficulty: BotDifficulty) => Promise<{ success: boolean; error?: string }>;
   onStartGame: () => Promise<{ success: boolean; error?: string }>;
-  onUpdateSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }) => Promise<{ success: boolean; error?: string }>;
+  onUpdateSettings: (settings: { turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength; gameVariant?: GameVariant }) => Promise<{ success: boolean; error?: string }>;
   onToggleReady: () => Promise<{ success: boolean; error?: string }>;
   onRequestTeamSwitch: (toTeamIndex: number) => Promise<{ success: boolean; error?: string }>;
   onRespondTeamSwitch: (playerId: string, approved: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -55,6 +55,10 @@ export function LobbyScreen({
   const canStart = VALID_PLAYER_COUNTS.includes(roomInfo.players.length);
   const allPlayersReady = roomInfo.players.every(p => p.ready);
   const myPlayer = roomInfo.players.find(p => p.id === playerId);
+  const hasBots = roomInfo.players.some(player => player.isBot);
+  const isKingOfTheBoard = roomInfo.gameVariant === 'king-of-the-board';
+  const canUseKingOfTheBoard = roomInfo.maxPlayers >= 4 && !hasBots;
+  const canStartKingOfTheBoard = !isKingOfTheBoard || (roomInfo.players.length >= 4 && !hasBots);
 
   const handleStart = async () => {
     setLoading(true);
@@ -160,10 +164,16 @@ export function LobbyScreen({
     if (result.error) setError(result.error);
   };
 
+  const handleUpdateGameVariant = async (value: GameVariant) => {
+    const result = await onUpdateSettings({ gameVariant: value });
+    if (result.error) setError(result.error);
+  };
+
   const handleSpeedSequencePreset = async () => {
     const result = await onUpdateSettings({
       turnTimeLimit: 15,
-      sequenceLength: 4
+      sequenceLength: 4,
+      gameVariant: 'classic',
     });
     if (result.error) setError(result.error);
   };
@@ -171,7 +181,8 @@ export function LobbyScreen({
   const handleClassicPreset = async () => {
     const result = await onUpdateSettings({
       turnTimeLimit: 0,
-      sequenceLength: 5
+      sequenceLength: 5,
+      gameVariant: 'classic',
     });
     if (result.error) setError(result.error);
   };
@@ -280,7 +291,7 @@ export function LobbyScreen({
           <div className="info-item">
             <span className="info-label">Mode</span>
             <span className="info-value">
-              {roomInfo.sequenceLength === 4 ? 'Blitz' : 'Standard'}
+              {isKingOfTheBoard ? 'King Zone' : roomInfo.sequenceLength === 4 ? 'Blitz' : 'Standard'}
             </span>
           </div>
           <div className="info-item">
@@ -365,7 +376,7 @@ export function LobbyScreen({
           {roomInfo.players.length < roomInfo.maxPlayers && (
             <div className="empty-slots">
               <div>Waiting for {roomInfo.maxPlayers - roomInfo.players.length} more player{roomInfo.maxPlayers - roomInfo.players.length > 1 ? 's' : ''}...</div>
-              {isHost && (
+              {isHost && !isKingOfTheBoard && (
                 <div className="add-bot-row">
                   <span className="add-bot-label">Add Bot:</span>
                   <button className="add-bot-btn add-bot-easy" onClick={() => handleAddBot('easy')}>Easy</button>
@@ -373,6 +384,9 @@ export function LobbyScreen({
                   <button className="add-bot-btn add-bot-hard" onClick={() => handleAddBot('hard')}>Hard</button>
                   <button className="add-bot-btn add-bot-impossible" onClick={() => handleAddBot('impossible')}>Impossible</button>
                 </div>
+              )}
+              {isHost && isKingOfTheBoard && (
+                <div className="setting-hint">Bots are disabled in King of the Board.</div>
               )}
             </div>
           )}
@@ -388,18 +402,47 @@ export function LobbyScreen({
               <label className="setting-label">Standard Configurations</label>
               <div className="presets-options">
                 <button
-                  className={`preset-btn ${roomInfo.turnTimeLimit === 0 && roomInfo.sequenceLength === 5 ? 'active' : ''}`}
+                  className={`preset-btn ${roomInfo.gameVariant === 'classic' && roomInfo.turnTimeLimit === 0 && roomInfo.sequenceLength === 5 ? 'active' : ''}`}
                   onClick={handleClassicPreset}
                 >
                   Classic Sequence
                 </button>
                 <button
-                  className={`preset-btn speed ${roomInfo.turnTimeLimit === 15 && roomInfo.sequenceLength === 4 ? 'active' : ''}`}
+                  className={`preset-btn speed ${roomInfo.gameVariant === 'classic' && roomInfo.turnTimeLimit === 15 && roomInfo.sequenceLength === 4 ? 'active' : ''}`}
                   onClick={handleSpeedSequencePreset}
                 >
                   Speed Edition
                 </button>
               </div>
+            </div>
+
+            <div className="setting-group">
+              <label className="setting-label">Featured Variant</label>
+              <div className="presets-options">
+                <button
+                  className={`preset-btn ${roomInfo.gameVariant === 'classic' ? 'active' : ''}`}
+                  onClick={() => handleUpdateGameVariant('classic')}
+                >
+                  Classic Rules
+                </button>
+                <button
+                  className={`preset-btn ${roomInfo.gameVariant === 'king-of-the-board' ? 'active' : ''}`}
+                  onClick={() => handleUpdateGameVariant('king-of-the-board')}
+                  disabled={!canUseKingOfTheBoard}
+                  title={canUseKingOfTheBoard ? undefined : hasBots ? 'Remove bots to enable King of the Board' : 'King of the Board requires a 4+ player room'}
+                >
+                  King of the Board
+                </button>
+              </div>
+              <p className="setting-hint">
+                {isKingOfTheBoard
+                  ? '3x3 king zone, 1 point for normal sequences, 2 points in the zone, first to 3 points'
+                  : hasBots
+                    ? 'Remove bots to turn on King of the Board'
+                    : canUseKingOfTheBoard
+                    ? 'Turn this on for 4+ player multiplayer games only'
+                    : 'King of the Board requires a room with at least 4 seats'}
+              </p>
             </div>
 
             <div className="setting-group">
@@ -410,13 +453,16 @@ export function LobbyScreen({
                     key={option.value}
                     className={`game-mode-btn ${roomInfo.sequenceLength === option.value ? 'active' : ''}`}
                     onClick={() => handleUpdateSequenceLength(option.value)}
+                    disabled={isKingOfTheBoard}
                   >
                     {option.label}
                   </button>
                 ))}
               </div>
               <p className="setting-hint">
-                {roomInfo.sequenceLength === 4
+                {isKingOfTheBoard
+                  ? 'King of the Board always uses standard 5-chip sequences'
+                  : roomInfo.sequenceLength === 4
                   ? 'Blitz: Faster games with 4-in-a-row sequences'
                   : 'Standard: Classic 5-in-a-row sequences'}
               </p>
@@ -424,19 +470,25 @@ export function LobbyScreen({
 
             <div className="setting-group">
               <label className="setting-label">Victory Condition</label>
-              <div className="sequences-options">
-                {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    className={`sequences-option-btn ${roomInfo.sequencesToWin === option.value ? 'active' : ''}`}
-                    onClick={() => handleUpdateSequencesToWin(option.value)}
-                  >
-                    {option.value}
-                  </button>
-                ))}
-              </div>
+              {!isKingOfTheBoard ? (
+                <div className="sequences-options">
+                  {SEQUENCES_TO_WIN_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      className={`sequences-option-btn ${roomInfo.sequencesToWin === option.value ? 'active' : ''}`}
+                      onClick={() => handleUpdateSequencesToWin(option.value)}
+                    >
+                      {option.value}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="setting-hint">King of the Board is always first to 3 points.</div>
+              )}
               <p className="setting-hint">
-                First team to complete {roomInfo.sequencesToWin} sequence{roomInfo.sequencesToWin > 1 ? 's' : ''} wins
+                {isKingOfTheBoard
+                  ? 'Normal sequences score 1 point. King-zone sequences score 2 points.'
+                  : `First team to complete ${roomInfo.sequencesToWin} sequence${roomInfo.sequencesToWin > 1 ? 's' : ''} wins`}
               </p>
             </div>
 
@@ -497,12 +549,16 @@ export function LobbyScreen({
           <button
             className="btn btn-primary btn-lg w-full start-button"
             onClick={handleStart}
-            disabled={loading || !canStart || !allPlayersReady}
-            style={canStart && allPlayersReady ? { background: 'linear-gradient(to bottom, #f39c12, #d35400)' } : {}}
+            disabled={loading || !canStart || !allPlayersReady || !canStartKingOfTheBoard}
+            style={canStart && allPlayersReady && canStartKingOfTheBoard ? { background: 'linear-gradient(to bottom, #f39c12, #d35400)' } : {}}
           >
             {loading
               ? 'Starting...'
-              : !canStart
+              : !canStartKingOfTheBoard
+                ? hasBots
+                  ? 'Remove bots to start King of the Board'
+                  : 'King of the Board needs 4+ players'
+                : !canStart
                 ? `Need ${findNearestValidCount(roomInfo.players.length)} players`
                 : !allPlayersReady
                   ? 'Waiting for players...'

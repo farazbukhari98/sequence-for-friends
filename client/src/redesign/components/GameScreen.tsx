@@ -46,6 +46,10 @@ interface SequenceCelebration {
   teamIndex: number;
   teamColor: TeamColor;
   playerNames: string[];
+  pointsAwarded: number;
+  totalScore: number;
+  usedKingZone: boolean;
+  scoreToWin: number;
 }
 
 // Classic color overrides for the redesign theme
@@ -76,7 +80,7 @@ export function GameScreen({
   const [showCutCards, setShowCutCards] = useState(!!cutCards);
   const [sequenceCelebration, setSequenceCelebration] = useState<SequenceCelebration | null>(null);
 
-  const prevSequenceCountRef = useRef<number[]>([...gameState.sequencesCompleted]);
+  const prevTeamScoreRef = useRef<number[]>([...gameState.teamScores]);
   const { containerRef, contentRef, isZoomed, resetTransform } = usePinchZoom();
 
   const myPlayer = gameState.players.find(p => p.id === playerId);
@@ -217,16 +221,21 @@ export function GameScreen({
   }, [showCutCards, cutCards]);
 
   useEffect(() => {
-    const prevCounts = prevSequenceCountRef.current;
-    const currentCounts = gameState.sequencesCompleted;
+    const prevScores = prevTeamScoreRef.current;
+    const currentScores = gameState.teamScores;
+    const lastScoringPlayer = gameState.lastMove?.playerId
+      ? gameState.players.find(player => player.id === gameState.lastMove?.playerId)
+      : null;
+    const lastScoringTeamIndex = lastScoringPlayer?.teamIndex;
+    const lastScoring = gameState.lastMove?.scoring;
 
-    for (let i = 0; i < currentCounts.length; i++) {
-      const prevCount = prevCounts[i] || 0;
-      const currentCount = currentCounts[i] || 0;
+    for (let i = 0; i < currentScores.length; i++) {
+      const previousScore = prevScores[i] || 0;
+      const currentScore = currentScores[i] || 0;
 
-      if (currentCount > prevCount) {
-        // Don't block the scoring team — they still need to draw a card
-        if (i === myPlayer?.teamIndex) {
+      if (currentScore > previousScore) {
+        // Don't block the local scoring player while they still need to draw.
+        if (lastScoringPlayer?.id === playerId) {
           continue;
         }
 
@@ -234,19 +243,32 @@ export function GameScreen({
         const teamPlayers = gameState.players
           .filter(p => p.teamIndex === i)
           .map(p => p.name);
+        const pointsAwarded = lastScoringTeamIndex === i && lastScoring
+          ? lastScoring.pointsAwarded
+          : currentScore - previousScore;
+        const totalScore = lastScoringTeamIndex === i && lastScoring
+          ? lastScoring.totalScore
+          : currentScore;
+        const usedKingZone = lastScoringTeamIndex === i && lastScoring
+          ? lastScoring.usedKingZone
+          : pointsAwarded > 1;
 
         setSequenceCelebration({
           teamIndex: i,
           teamColor,
           playerNames: teamPlayers,
+          pointsAwarded,
+          totalScore,
+          usedKingZone,
+          scoreToWin: gameState.config.scoreToWin,
         });
 
         if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
         break;
       }
     }
-    prevSequenceCountRef.current = [...currentCounts];
-  }, [gameState.sequencesCompleted, gameState.config.teamColors, gameState.players, myPlayer?.teamIndex]);
+    prevTeamScoreRef.current = [...currentScores];
+  }, [gameState.teamScores, gameState.lastMove, gameState.config.teamColors, gameState.config.scoreToWin, gameState.players, playerId]);
 
   useEffect(() => {
     if (sequenceCelebration) {
@@ -299,8 +321,8 @@ export function GameScreen({
         <div className="game-header-right">
           <ScoreDisplay
             teamColors={gameState.config.teamColors}
-            sequencesCompleted={gameState.sequencesCompleted}
-            sequencesToWin={gameState.config.sequencesToWin}
+            scores={gameState.teamScores}
+            scoreToWin={gameState.config.scoreToWin}
             getClassicColorHex={getClassicColorHex}
           />
         </div>
@@ -331,6 +353,7 @@ export function GameScreen({
             lockedCells={gameState.lockedCells}
             completedSequences={gameState.completedSequences}
             teamColors={gameState.config.teamColors}
+            kingZone={gameState.kingZone}
             onCellClick={handleCellClick}
           />
         </div>
@@ -420,7 +443,11 @@ export function GameScreen({
         <SequenceCelebrationModal
           teamColor={sequenceCelebration.teamColor}
           playerNames={sequenceCelebration.playerNames}
-          sequenceLength={gameState.config.sequenceLength}
+          pointsAwarded={sequenceCelebration.pointsAwarded}
+          totalScore={sequenceCelebration.totalScore}
+          usedKingZone={sequenceCelebration.usedKingZone}
+          scoreToWin={sequenceCelebration.scoreToWin}
+          gameVariant={gameState.config.gameVariant}
           onDismiss={() => setSequenceCelebration(null)}
         />
       )}
@@ -451,12 +478,12 @@ export function GameScreen({
 // Score Display
 interface ScoreDisplayProps {
   teamColors: TeamColor[];
-  sequencesCompleted: number[];
-  sequencesToWin: number;
+  scores: number[];
+  scoreToWin: number;
   getClassicColorHex: (color: string) => string;
 }
 
-function ScoreDisplay({ teamColors, sequencesCompleted, sequencesToWin, getClassicColorHex }: ScoreDisplayProps) {
+function ScoreDisplay({ teamColors, scores, scoreToWin, getClassicColorHex }: ScoreDisplayProps) {
   return (
     <div className="score-display">
       {teamColors.map((color, index) => (
@@ -468,7 +495,7 @@ function ScoreDisplay({ teamColors, sequencesCompleted, sequencesToWin, getClass
             {getTeamLetter(color)}
           </div>
           <span className="score-value">
-            {sequencesCompleted[index] || 0}/{sequencesToWin}
+            {scores[index] || 0}/{scoreToWin}
           </span>
         </div>
       ))}
@@ -515,11 +542,24 @@ function CutCardsModal({ cutCards, dealerIndex, players, onDismiss }: CutCardsMo
 interface SequenceCelebrationModalProps {
   teamColor: TeamColor;
   playerNames: string[];
-  sequenceLength: number;
+  pointsAwarded: number;
+  totalScore: number;
+  usedKingZone: boolean;
+  scoreToWin: number;
+  gameVariant: RoomInfo['gameVariant'];
   onDismiss: () => void;
 }
 
-function SequenceCelebrationModal({ teamColor, playerNames, sequenceLength, onDismiss }: SequenceCelebrationModalProps) {
+function SequenceCelebrationModal({
+  teamColor,
+  playerNames,
+  pointsAwarded,
+  totalScore,
+  usedKingZone,
+  scoreToWin,
+  gameVariant,
+  onDismiss,
+}: SequenceCelebrationModalProps) {
   const confettiPieces = useMemo(() =>
     Array.from({ length: 30 }).map(() => ({
       left: `${Math.random() * 100}%`,
@@ -551,7 +591,9 @@ function SequenceCelebrationModal({ teamColor, playerNames, sequenceLength, onDi
           <span className="sequence-star">&#9733;</span>
         </div>
 
-        <h2 className="sequence-celebration-title">SEQUENCE!</h2>
+        <h2 className="sequence-celebration-title">
+          {usedKingZone && gameVariant === 'king-of-the-board' ? 'KING ZONE!' : 'SEQUENCE!'}
+        </h2>
 
         <div className="sequence-celebration-team">
           Team {teamColor.toUpperCase()}
@@ -562,7 +604,12 @@ function SequenceCelebrationModal({ teamColor, playerNames, sequenceLength, onDi
         </div>
 
         <div className="sequence-celebration-subtitle">
-          scored a {sequenceLength}-chip sequence!
+          scored {pointsAwarded} point{pointsAwarded === 1 ? '' : 's'}
+          {usedKingZone && gameVariant === 'king-of-the-board' ? ' through the king zone' : ''}.
+        </div>
+
+        <div className="sequence-celebration-score">
+          Total score: {totalScore}/{scoreToWin}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { MutableRefObject } from 'react';
+import { Capacitor } from '@capacitor/core';
 import type { SequenceWebSocket } from '../lib/websocket';
 
 /**
@@ -17,48 +18,73 @@ import type { SequenceWebSocket } from '../lib/websocket';
 export function useAppLifecycle(
   wsRef: MutableRefObject<SequenceWebSocket | null>,
   tokenRef: MutableRefObject<string | null>,
+  roomCodeRef: MutableRefObject<string | null>,
 ): void {
   useEffect(() => {
+    let wasBackgrounded = false;
+    let lastResumeAt = 0;
+    const cooldownMs = 1500;
+
     const tryReconnect = () => {
-      // Only reconnect if we have active session credentials
-      if (!tokenRef.current) return;
-      wsRef.current?.forceReconnect();
+      const now = Date.now();
+      if (now - lastResumeAt < cooldownMs) return;
+      if (!tokenRef.current || !roomCodeRef.current) return;
+      const ws = wsRef.current;
+      if (!ws) return;
+      lastResumeAt = now;
+      wasBackgrounded = false;
+      ws.forceReconnect();
     };
 
-    // --- Capacitor native listener ---
     let capListenerRemove: (() => void) | null = null;
+    const isNative = Capacitor.isNativePlatform();
 
-    // Dynamically import Capacitor App plugin (no-op on web if not installed)
-    import('@capacitor/app')
-      .then(({ App }) => {
-        App.addListener('appStateChange', ({ isActive }) => {
-          if (isActive) {
-            tryReconnect();
-          }
-        }).then(handle => {
-          capListenerRemove = () => handle.remove();
+    if (isNative) {
+      import('@capacitor/app')
+        .then(({ App }) => {
+          App.addListener('appStateChange', ({ isActive }) => {
+            if (!isActive) {
+              wasBackgrounded = true;
+              return;
+            }
+            if (wasBackgrounded) {
+              tryReconnect();
+            }
+          }).then(handle => {
+            capListenerRemove = () => handle.remove();
+          });
+        })
+        .catch(() => {
+          // Capacitor App plugin unavailable - ignore on web
         });
-      })
-      .catch(() => {
-        // Capacitor not available (pure web) — that's fine
-      });
+    } else {
+      const onVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') {
+          wasBackgrounded = true;
+          return;
+        }
+        if (document.visibilityState === 'visible' && wasBackgrounded) {
+          tryReconnect();
+        }
+      };
 
-    // --- Web visibility listener ---
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        tryReconnect();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
+      const onFocus = () => {
+        if (document.visibilityState === 'visible' && wasBackgrounded) {
+          tryReconnect();
+        }
+      };
 
-    // --- Focus listener (desktop fallback) ---
-    const onFocus = () => tryReconnect();
-    window.addEventListener('focus', onFocus);
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      window.addEventListener('focus', onFocus);
+
+      return () => {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+        window.removeEventListener('focus', onFocus);
+      };
+    }
 
     return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('focus', onFocus);
       capListenerRemove?.();
     };
-  }, [wsRef, tokenRef]);
+  }, [wsRef, tokenRef, roomCodeRef]);
 }

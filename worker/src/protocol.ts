@@ -4,6 +4,7 @@ import type {
   SequencesToWin,
   SequenceLength,
   SeriesLength,
+  GameVariant,
   BotDifficulty,
   EmoteType,
   QuickMessageType,
@@ -89,6 +90,7 @@ export interface UpdateRoomSettingsMessage {
     sequencesToWin?: SequencesToWin;
     sequenceLength?: SequenceLength;
     seriesLength?: SeriesLength;
+    gameVariant?: GameVariant;
   };
 }
 

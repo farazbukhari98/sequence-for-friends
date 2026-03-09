@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import type { BoardChips, CardCode, SequenceLine, TeamColor } from '../../../../shared/types';
+import type { BoardChips, CardCode, KingZone, SequenceLine, TeamColor } from '../../../../shared/types';
 import {
   BOARD_LAYOUT,
+  cellKey,
   isCorner,
   getSuitSymbol,
   getRankDisplay,
@@ -19,6 +20,7 @@ interface BoardProps {
   lockedCells: string[][];
   completedSequences: SequenceLine[];
   teamColors: TeamColor[];
+  kingZone: KingZone | null;
   onCellClick: (row: number, col: number) => void;
 }
 
@@ -31,6 +33,7 @@ export function Board({
   lockedCells,
   completedSequences,
   teamColors,
+  kingZone,
   onCellClick,
 }: BoardProps) {
   const lockedCellSet = useMemo(() => {
@@ -50,6 +53,11 @@ export function Board({
     });
     return map;
   }, [completedSequences]);
+
+  const kingZoneCells = useMemo(() => {
+    if (!kingZone) return new Set<string>();
+    return new Set(kingZone.cells.map(([row, col]) => cellKey(row, col)));
+  }, [kingZone]);
 
   const getClassicColorHex = (color: string) => {
     switch(color) {
@@ -72,6 +80,7 @@ export function Board({
             const isPreview = previewCell?.[0] === rowIndex && previewCell?.[1] === colIndex;
             const isLocked = lockedCellSet.has(cellKey);
             const sequenceTeam = cellSequenceTeam.get(cellKey);
+            const isKingZoneCell = kingZoneCells.has(cellKey);
 
             return (
               <BoardCell
@@ -86,6 +95,7 @@ export function Board({
                 previewIsRemoval={previewIsRemoval}
                 isLocked={isLocked}
                 sequenceTeam={sequenceTeam}
+                isKingZoneCell={isKingZoneCell}
                 onClick={() => onCellClick(rowIndex, colIndex)}
                 getClassicColorHex={getClassicColorHex}
               />
@@ -108,6 +118,7 @@ interface BoardCellProps {
   previewIsRemoval: boolean;
   isLocked: boolean;
   sequenceTeam: number | undefined;
+  isKingZoneCell: boolean;
   onClick: () => void;
   getClassicColorHex: (color: string) => string;
 }
@@ -123,6 +134,7 @@ function BoardCell({
   previewIsRemoval,
   isLocked,
   sequenceTeam,
+  isKingZoneCell,
   onClick,
   getClassicColorHex,
 }: BoardCellProps) {
@@ -145,12 +157,14 @@ function BoardCell({
 
   return (
     <div
-      className={`board-cell ${isCorner ? 'corner' : ''} ${isHighlighted ? 'highlighted' : ''} ${isLocked ? 'locked' : ''} ${sequenceTeam !== undefined ? 'in-sequence' : ''}`}
+      className={`board-cell ${isCorner ? 'corner' : ''} ${isHighlighted ? 'highlighted' : ''} ${isLocked ? 'locked' : ''} ${sequenceTeam !== undefined ? 'in-sequence' : ''} ${isKingZoneCell ? 'king-zone' : ''}`}
       onClick={onClick}
       role="button"
       tabIndex={isHighlighted ? 0 : -1}
       aria-label={isWild ? 'Wild corner' : `${rankDisplay} of ${suitSymbol}`}
     >
+      {isKingZoneCell && <div className="king-zone-overlay" />}
+
       {isWild ? (
         <div className="wild-corner">
           <span className="wild-star">★</span>
