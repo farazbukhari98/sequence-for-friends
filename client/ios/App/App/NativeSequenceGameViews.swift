@@ -1512,6 +1512,7 @@ struct NativeGameView: View {
     @State private var selectedCell: (Int, Int)?
     @State private var showCutCards = false
     @State private var sequenceCelebration: SequenceCelebrationState?
+    @State private var preGameStats: UserStats?
     @State private var previousScores: [Int] = []
     @State private var lastEventCount = 0
     @State private var activeToast: (text: String, color: Color, icon: String?)?
@@ -1688,10 +1689,19 @@ struct NativeGameView: View {
                 roomInfo: roomInfo,
                 playerID: playerID,
                 winnerTeamIndex: winnerTeamIndex,
+                preGameStats: preGameStats,
+                currentStats: model.stats,
+                detailedStats: model.detailedStats,
                 onLeave: { model.leaveRoom() },
                 onContinueSeries: { await model.continueSeries() },
                 onEndSeries: { await model.endSeries() }
             )
+            .task {
+                if preGameStats == nil {
+                    preGameStats = model.stats
+                    await model.loadProfile()
+                }
+            }
         }
     }
 

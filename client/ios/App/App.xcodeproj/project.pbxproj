@@ -16,6 +16,8 @@
 		B10000000000000000000003 /* NativeSequenceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* NativeSequenceViews.swift */; };
 		B10000000000000000000004 /* NativeSequenceGameViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* NativeSequenceGameViews.swift */; };
 		B10000000000000000000005 /* NativeSequenceEndgameViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* NativeSequenceEndgameViews.swift */; };
+		B10000000000000000000006 /* NativeSequenceAchievements.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* NativeSequenceAchievements.swift */; };
+		B10000000000000000000007 /* NativeSequenceProfileViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* NativeSequenceProfileViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +34,8 @@
 		B10000000000000000000013 /* NativeSequenceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSequenceViews.swift; sourceTree = "<group>"; };
 		B10000000000000000000014 /* NativeSequenceGameViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSequenceGameViews.swift; sourceTree = "<group>"; };
 		B10000000000000000000015 /* NativeSequenceEndgameViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSequenceEndgameViews.swift; sourceTree = "<group>"; };
+		B10000000000000000000016 /* NativeSequenceAchievements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSequenceAchievements.swift; sourceTree = "<group>"; };
+		B10000000000000000000017 /* NativeSequenceProfileViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSequenceProfileViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -72,6 +76,8 @@
 				B10000000000000000000013 /* NativeSequenceViews.swift */,
 				B10000000000000000000014 /* NativeSequenceGameViews.swift */,
 				B10000000000000000000015 /* NativeSequenceEndgameViews.swift */,
+				B10000000000000000000016 /* NativeSequenceAchievements.swift */,
+				B10000000000000000000017 /* NativeSequenceProfileViews.swift */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
@@ -162,6 +168,8 @@
 				B10000000000000000000003 /* NativeSequenceViews.swift in Sources */,
 				B10000000000000000000004 /* NativeSequenceGameViews.swift in Sources */,
 				B10000000000000000000005 /* NativeSequenceEndgameViews.swift in Sources */,
+				B10000000000000000000006 /* NativeSequenceAchievements.swift in Sources */,
+				B10000000000000000000007 /* NativeSequenceProfileViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

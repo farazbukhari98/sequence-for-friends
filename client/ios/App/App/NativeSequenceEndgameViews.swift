@@ -138,6 +138,9 @@ struct NativeWinnerModal: View {
     let roomInfo: RoomInfo
     let playerID: String
     let winnerTeamIndex: Int
+    let preGameStats: UserStats?
+    let currentStats: UserStats
+    let detailedStats: DetailedStatsResponse?
     let onLeave: () -> Void
     let onContinueSeries: () async -> Void
     let onEndSeries: () async -> Void
@@ -217,6 +220,8 @@ struct NativeWinnerModal: View {
                         .foregroundStyle(.white.opacity(0.76))
                         .multilineTextAlignment(.center)
 
+                    endgameAchievementsCard
+
                     winnerActions
                 }
                 .padding(.horizontal, 20)
@@ -284,6 +289,61 @@ struct NativeWinnerModal: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var endgameAchievementsCard: some View {
+        let newlyUnlocked = newlyUnlockedAchievements
+        if !newlyUnlocked.isEmpty {
+            NativeCard {
+                VStack(spacing: 10) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "trophy.fill")
+                            .foregroundStyle(Color(hex: "#facc15"))
+                        Text("Achievements Unlocked!")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    ForEach(newlyUnlocked.prefix(3)) { achievement in
+                        HStack(spacing: 10) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color(hex: achievement.category.colorHex).opacity(0.2))
+                                    .frame(width: 32, height: 32)
+                                Image(systemName: achievement.icon)
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Color(hex: achievement.category.colorHex))
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(achievement.title)
+                                    .font(.caption.weight(.bold))
+                                Text(achievement.description)
+                                    .font(.caption2)
+                                    .foregroundStyle(.white.opacity(0.6))
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        } else if preGameStats != nil {
+            // Stats updated but no new achievements
+            HStack(spacing: 6) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.caption)
+                    .foregroundStyle(Color(hex: "#22c55e"))
+                Text("Win Rate: \(currentStats.winRate)%")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+        }
+    }
+
+    private var newlyUnlockedAchievements: [Achievement] {
+        guard let pre = preGameStats else { return [] }
+        let before = computeAchievements(stats: pre, detailed: nil)
+        let after = computeAchievements(stats: currentStats, detailed: detailedStats)
+        let lockedBefore = Set(before.filter { !$0.isUnlocked }.map(\.id))
+        return after.filter { $0.isUnlocked && lockedBefore.contains($0.id) }
     }
 
     private var countdownTaskID: String {
