@@ -1372,6 +1372,23 @@ export class RoomDO {
       bot_difficulty: botPlayer?.botDifficulty || null,
     };
 
+    // Safety net: recover userId from WebSocket tags for any player missing it
+    for (const player of this.room.players) {
+      if (player.isBot || player.userId) continue;
+      const ws = this.playerToWs.get(player.id);
+      if (ws) {
+        try {
+          const tagUserId = this.state.getTags(ws)[4] || undefined;
+          if (tagUserId) {
+            console.log(`[STATS] Recovered userId=${tagUserId} for player=${player.name} from WS tags`);
+            player.userId = tagUserId;
+          }
+        } catch {
+          // WebSocket may be closed, tags unavailable
+        }
+      }
+    }
+
     // Build participants - only for human players with userId
     const participants: DbGameParticipant[] = [];
     for (const player of this.room.players) {
@@ -1406,11 +1423,32 @@ export class RoomDO {
 
     console.log(`[STATS] Persisting ${participants.length} participants to D1`);
 
-    try {
-      await insertGameHistory(this.env.DB, game, participants);
-      console.log(`[STATS] Successfully persisted game ${gameId}`);
-    } catch (err) {
-      console.error('[STATS] Failed to persist game results:', err);
+    const maxRetries = 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await insertGameHistory(this.env.DB, game, participants);
+        console.log(`[STATS] Successfully persisted game ${gameId} (attempt ${attempt + 1})`);
+        await this.state.storage.put('lastPersistAttempt', {
+          gameId, timestamp: now, success: true, attempt: attempt + 1,
+          participantCount: participants.length,
+        });
+        break;
+      } catch (err) {
+        console.error(`[STATS] Persist attempt ${attempt + 1} failed:`, err);
+        if (attempt === maxRetries) {
+          await this.state.storage.put('lastPersistError', {
+            gameId, timestamp: Date.now(),
+            error: err instanceof Error ? err.message : String(err),
+            attempts: maxRetries + 1,
+            participantUserIds: participants.map(p => p.user_id),
+            playerDebug: this.room.players.map(p => ({
+              name: p.name, isBot: !!p.isBot, hasUserId: !!p.userId,
+            })),
+          });
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+        }
+      }
     }
   }
 

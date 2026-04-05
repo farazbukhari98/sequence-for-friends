@@ -199,8 +199,8 @@ export default {
       try {
         const payload = await verifySessionToken(authToken, env.AUTH_SECRET);
         authenticatedUserId = payload.sub;
-      } catch {
-        // Continue without auth - anonymous play still works
+      } catch (err) {
+        console.warn('[AUTH] WebSocket auth failed:', err instanceof Error ? err.message : err);
       }
     }
 

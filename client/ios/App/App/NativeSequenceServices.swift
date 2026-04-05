@@ -909,6 +909,9 @@ final class AppModel: ObservableObject {
         if clearError {
             errorMessage = nil
         }
+        if destination == .home {
+            Task { await loadProfile() }
+        }
     }
 
     private func reconnect(roomCode: String, token: String) async throws -> ReconnectResponse {

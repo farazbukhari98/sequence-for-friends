@@ -579,6 +579,7 @@ struct HomeView: View {
         }
         .onAppear {
             if model.pendingRoomCode != nil { activeSheet = .join }
+            Task { await model.loadProfile() }
         }
     }
 }
