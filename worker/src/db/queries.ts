@@ -722,12 +722,20 @@ export async function getFriendStatus(db: D1Database, myUserId: string, theirUse
 // ============================================
 
 export async function getFriends(db: D1Database, userId: string): Promise<(DbFriend & { username: string; display_name: string; avatar_id: string; avatar_color: string; impossible_bot_wins: number })[]> {
+  // Fetch friend IDs first
+  const friendIds = await db.prepare(
+    `SELECT friend_id FROM friends WHERE user_id = ? AND status = 'accepted'`
+  ).bind(userId).all<{ friend_id: string }>();
+
+  // Ensure all friends have backfilled stats rows (handles legacy users)
+  await Promise.all((friendIds.results ?? []).map(r => ensureUserStatsRow(db, r.friend_id)));
+
   const result = await db.prepare(`
     SELECT f.*, u.username, u.display_name, u.avatar_id, u.avatar_color,
-           COALESCE(s.impossible_bot_wins, 0) AS impossible_bot_wins
+           s.impossible_bot_wins
     FROM friends f
     INNER JOIN users u ON f.friend_id = u.id
-    LEFT JOIN user_stats s ON f.friend_id = s.user_id
+    INNER JOIN user_stats s ON f.friend_id = s.user_id
     WHERE f.user_id = ? AND f.status = 'accepted'
     ORDER BY u.display_name ASC
   `).bind(userId).all();

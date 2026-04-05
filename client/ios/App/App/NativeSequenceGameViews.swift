@@ -309,9 +309,13 @@ struct NativeLobbyView: View {
                 // Set sequenceLength silently to avoid double-submit from its observer
                 isSyncingFromServer = true
                 sequenceLength = 5
-                DispatchQueue.main.async { isSyncingFromServer = false }
+                DispatchQueue.main.async {
+                    isSyncingFromServer = false
+                    autoApplySettings()
+                }
+            } else {
+                autoApplySettings()
             }
-            autoApplySettings()
         }
         .onChange(of: timer) { _, _ in autoApplySettings() }
         .onChange(of: sequences) { _, _ in autoApplySettings() }

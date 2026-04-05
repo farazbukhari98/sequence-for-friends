@@ -267,7 +267,6 @@ extension AppModel {
         do {
             errorMessage = nil
             cancelRecovery()
-            sessionStore.saveRoomSession(nil)
             connectionStatus = .connecting("Creating room…")
             try await socketManager.connect(path: "/ws/create", authToken: sessionStore.sessionToken())
             let response: CreateRoomResponse = try await socketManager.request(type: "create-room", data: CreateRoomPayload(roomName: roomName, playerName: playerName, maxPlayers: maxPlayers, teamCount: teamCount, turnTimeLimit: turnTimeLimit, sequencesToWin: sequencesToWin))
@@ -289,7 +288,6 @@ extension AppModel {
         do {
             errorMessage = nil
             cancelRecovery()
-            sessionStore.saveRoomSession(nil)
             connectionStatus = .connecting("Creating bot game…")
             try await socketManager.connect(path: "/ws/create", authToken: sessionStore.sessionToken())
             let response: CreateRoomResponse = try await socketManager.request(type: "create-bot-game", data: CreateBotGamePayload(playerName: playerName, difficulty: difficulty, sequenceLength: sequenceLength, sequencesToWin: sequencesToWin, seriesLength: seriesLength))
@@ -311,7 +309,6 @@ extension AppModel {
         do {
             errorMessage = nil
             cancelRecovery()
-            sessionStore.saveRoomSession(nil)
             let normalized = code.uppercased()
             connectionStatus = .connecting("Joining room…")
             try await socketManager.connect(path: "/ws/room/\(normalized)", authToken: sessionStore.sessionToken())
