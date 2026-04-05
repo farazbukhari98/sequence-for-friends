@@ -686,3 +686,70 @@ export interface FriendRequest {
   avatarColor: string;
   sentAt: number;
 }
+
+// ============================================
+// DETAILED STATS TYPES
+// ============================================
+
+export interface ModeBreakdown {
+  gamesPlayed: number;
+  gamesWon: number;
+  winRate: number;
+  avgDurationMs: number | null;
+  fastestWinMs: number | null;
+  totalSequences: number;
+}
+
+export interface DetailedStats {
+  overall: UserStats;
+  byMode: {
+    botEasy: ModeBreakdown | null;
+    botMedium: ModeBreakdown | null;
+    botHard: ModeBreakdown | null;
+    botImpossible: ModeBreakdown | null;
+    multiplayer: ModeBreakdown | null;
+  };
+  byVariant: {
+    classic: ModeBreakdown | null;
+    kingOfTheBoard: ModeBreakdown | null;
+  };
+  byFormat: {
+    standard: ModeBreakdown | null;
+    blitz: ModeBreakdown | null;
+  };
+  insights: {
+    avgGameDurationMs: number | null;
+    favoriteTeamColor: string | null;
+    jackUsageRate: number;
+    firstMoveWinRate: number | null;
+    avgTurnsPerGame: number | null;
+    avgSequencesPerGame: number | null;
+    totalPlayTimeFormatted: string;
+  };
+  series: { played: number; won: number; lost: number; winRate: number };
+  memberSince: number;
+}
+
+export interface HeadToHeadStats {
+  gamesPlayed: number;
+  myWins: number;
+  theirWins: number;
+  myWinRate: number;
+  sameTeamGames: number;
+  sameTeamWins: number;
+  oppositeTeamGames: number;
+  oppositeTeamMyWins: number;
+  recentGames: GameHistorySummary[];
+}
+
+export interface GameHistorySummary {
+  id: string;
+  endedAt: number;
+  durationMs: number;
+  gameVariant: string;
+  botDifficulty: string | null;
+  wasStalemate: boolean;
+  myWon: boolean;
+  myTeamColor: string;
+  playerCount: number;
+}

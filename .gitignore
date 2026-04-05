@@ -57,6 +57,12 @@ worker/.wrangler/
 # Codex local configuration
 .codex/
 
+# Agent/tool runtime state
+.agents/
+.swarm/
+.xcodebuildmcp/
+wrangler.jsonc.bak
+
 # Claude Flow runtime data
 .claude-flow/data/
 .claude-flow/logs/

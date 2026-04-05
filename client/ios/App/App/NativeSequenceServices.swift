@@ -12,6 +12,7 @@ enum NativeConfig {
     static let websocketBaseURL = URL(string: "wss://sequence-for-friends.farazbukhari98.workers.dev")!
     static let reconnectRetryDelays: [UInt64] = [0, 500_000_000, 1_500_000_000, 3_000_000_000]
     static let reconnectVisibleDelay: UInt64 = 850_000_000
+    static let websocketHeartbeatInterval: UInt64 = 20_000_000_000
 }
 
 extension Notification.Name {
@@ -365,6 +366,7 @@ final class SocketManager: @unchecked Sendable {
     private var task: URLSessionWebSocketTask?
     private var pending = [String: (Result<Data, Error>) -> Void]()
     private var receiveTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
     private var nextMessageID = 0
 
     var onConnected: (() -> Void)?
@@ -394,11 +396,14 @@ final class SocketManager: @unchecked Sendable {
         try await waitForSocketOpen()
         onConnected?()
         receiveTask = Task { [weak self] in await self?.receiveLoop() }
+        heartbeatTask = Task { [weak self] in await self?.heartbeatLoop() }
     }
 
     func disconnect(notify: Bool = true) {
         receiveTask?.cancel()
         receiveTask = nil
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
         pending.values.forEach { $0(.failure(APIError(message: "Connection closed", statusCode: nil))) }
@@ -418,15 +423,10 @@ final class SocketManager: @unchecked Sendable {
     }
 
     private func waitForSocketOpen() async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            guard let task else {
-                continuation.resume(throwing: APIError(message: "Socket is not available", statusCode: nil))
-                return
-            }
-            task.sendPing { error in
-                error.map { continuation.resume(throwing: $0) } ?? continuation.resume()
-            }
+        guard let task else {
+            throw APIError(message: "Socket is not available", statusCode: nil)
         }
+        try await sendPing(on: task)
     }
 
     private func requestRaw(type: String, data: Encodable?, expectResponse: Bool) async throws -> Data {
@@ -443,7 +443,12 @@ final class SocketManager: @unchecked Sendable {
         let text = String(decoding: payload, as: UTF8.self)
 
         if !expectResponse {
-            try await task.send(.string(text))
+            do {
+                try await task.send(.string(text))
+            } catch {
+                handleTransportFailure(error)
+                throw error
+            }
             return Data()
         }
 
@@ -470,9 +475,40 @@ final class SocketManager: @unchecked Sendable {
                 } catch {
                     let handler = self.pending.removeValue(forKey: messageID!)
                     handler?(.failure(error))
+                    self.handleTransportFailure(error)
                 }
             }
         }
+    }
+
+    private func sendPing(on task: URLSessionWebSocketTask) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            task.sendPing { error in
+                error.map { continuation.resume(throwing: $0) } ?? continuation.resume()
+            }
+        }
+    }
+
+    private func heartbeatLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: NativeConfig.websocketHeartbeatInterval)
+            guard !Task.isCancelled, let task else { break }
+            do {
+                try await sendPing(on: task)
+            } catch {
+                handleTransportFailure(error)
+                break
+            }
+        }
+    }
+
+    private func handleTransportFailure(_ error: Error) {
+        let description = error.localizedDescription
+        if description.lowercased() == "cancelled" || (error as NSError).code == NSURLErrorCancelled {
+            return
+        }
+        onTransportInterrupted?(description)
+        disconnect()
     }
 
     private func receiveLoop() async {
@@ -488,8 +524,7 @@ final class SocketManager: @unchecked Sendable {
                 if Task.isCancelled || task == nil {
                     break
                 }
-                onTransportInterrupted?(error.localizedDescription)
-                disconnect()
+                handleTransportFailure(error)
                 break
             }
         }
@@ -550,9 +585,18 @@ final class AppModel: ObservableObject {
     @Published var isConnected = false
     @Published var errorMessage: String?
     @Published var stats = UserStats.empty
+    @Published var detailedStats: DetailedStatsResponse?
     @Published var friends: [FriendInfo] = []
     @Published var friendRequests: [FriendRequest] = []
-    @Published var searchResults: [FriendInfo] = []
+    @Published var searchResults: [SearchResult] = []
+    @Published var viewingProfile: FriendProfileResponse?
+    @Published var viewingDetailedStats: DetailedStatsResponse?
+    @Published var headToHead: HeadToHeadResponse?
+    @Published var recentGames: [GameHistorySummary] = []
+    @Published var recentGamesStatusMessage: String?
+    @Published var gameHistoryList: [GameHistorySummary] = []
+    @Published var gameHistoryHasMore = true
+    @Published var friendProfileUserId: String?
     @Published var teamSwitchRequest: TeamSwitchRequest?
     @Published var teamSwitchResponse: TeamSwitchResponse?
     @Published var gameModeInfo: GameModeInfo?
@@ -1007,7 +1051,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func cancelRecovery() {
+    func cancelRecovery() {
         recoveryGeneration += 1
         recoveryTask?.cancel()
         recoveryTask = nil
@@ -1029,9 +1073,18 @@ final class AppModel: ObservableObject {
         suggestedDisplayName = ""
         usernameAvailability = .idle
         stats = .empty
+        detailedStats = nil
         friends = []
         friendRequests = []
         searchResults = []
+        viewingProfile = nil
+        viewingDetailedStats = nil
+        headToHead = nil
+        recentGames = []
+        recentGamesStatusMessage = nil
+        gameHistoryList = []
+        gameHistoryHasMore = true
+        friendProfileUserId = nil
         teamSwitchRequest = nil
         teamSwitchResponse = nil
         gameModeInfo = nil

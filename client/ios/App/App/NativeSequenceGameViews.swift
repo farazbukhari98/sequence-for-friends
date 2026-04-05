@@ -225,11 +225,12 @@ struct NativeSecondaryButton: View {
 struct AvatarBubble: View {
     let avatarID: String
     let avatarColor: String
+    var size: CGFloat = 52
 
     var body: some View {
         Text(NativeTheme.avatarOptions.first(where: { $0.id == avatarID })?.emoji ?? "👤")
-            .font(.system(size: 28))
-            .frame(width: 52, height: 52)
+            .font(.system(size: size * 0.54))
+            .frame(width: size, height: size)
             .background(Color(hex: avatarColor), in: Circle())
     }
 }
@@ -279,6 +280,7 @@ struct NativeLobbyView: View {
     @State private var showingInviteSheet = false
     @State private var copiedRoomCode = false
     @State private var showSettings = false
+    @State private var isSyncingFromServer = false
 
     var body: some View {
         ScrollView {
@@ -304,9 +306,17 @@ struct NativeLobbyView: View {
         }
         .onChange(of: gameVariant) { _, newVariant in
             if newVariant == .kingOfTheBoard {
+                // Set sequenceLength silently to avoid double-submit from its observer
+                isSyncingFromServer = true
                 sequenceLength = 5
+                DispatchQueue.main.async { isSyncingFromServer = false }
             }
+            autoApplySettings()
         }
+        .onChange(of: timer) { _, _ in autoApplySettings() }
+        .onChange(of: sequences) { _, _ in autoApplySettings() }
+        .onChange(of: sequenceLength) { _, _ in autoApplySettings() }
+        .onChange(of: seriesLength) { _, _ in autoApplySettings() }
         .alert("Leave Room?", isPresented: $showingLeaveConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Leave", role: .destructive) { model.leaveRoom() }
@@ -534,7 +544,8 @@ struct NativeLobbyView: View {
                     LobbySegmentPicker(
                         selection: $gameVariant,
                         options: [(.classic, "Classic"), (.kingOfTheBoard, "King Zone")],
-                        disabledOptions: roomInfo.maxPlayers < 4 || roomInfo.players.contains(where: { $0.isBot == true }) ? [.kingOfTheBoard] : []
+                        disabledOptions: roomInfo.maxPlayers < 4 || roomInfo.players.contains(where: { $0.isBot == true }) ? [.kingOfTheBoard] : [],
+                        activeColor: gameVariant == .kingOfTheBoard ? Color(hex: "#d4a017") : nil
                     )
                 }
 
@@ -550,10 +561,28 @@ struct NativeLobbyView: View {
                 }
 
                 if gameVariant == .kingOfTheBoard {
-                    Text("King of the Board uses a shared 3x3 hotspot. Normal sequences score 1, king-zone sequences score 2, first to 3 points.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.72))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 10) {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(
+                                LinearGradient(colors: [Color(hex: "#facc15"), Color(hex: "#f59e0b")],
+                                               startPoint: .top, endPoint: .bottom)
+                            )
+                            .frame(width: 32, height: 32)
+                            .background(Color(hex: "#facc15").opacity(0.15), in: Circle())
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("King of the Board")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Color(hex: "#facc15"))
+                            Text("Shared 3x3 hotspot. Zone sequences = 2 pts, normal = 1 pt. First to 3 wins.")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.72))
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(hex: "#facc15").opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(hex: "#facc15").opacity(0.2), lineWidth: 1))
                 }
 
                 LobbyOptionRow(title: "SEQUENCES TO WIN", icon: "star.fill") {
@@ -593,28 +622,6 @@ struct NativeLobbyView: View {
                 }
 
                 HStack(spacing: 10) {
-                    Button(action: {
-                        Task {
-                            await model.updateRoomSettings(
-                                turnTimeLimit: timer,
-                                sequencesToWin: gameVariant == .kingOfTheBoard ? nil : sequences,
-                                sequenceLength: gameVariant == .kingOfTheBoard ? 5 : sequenceLength,
-                                seriesLength: seriesLength,
-                                gameVariant: gameVariant
-                            )
-                        }
-                        NativeHaptics.notify(.success)
-                    }) {
-                        Text("Apply")
-                            .font(.subheadline.weight(.bold))
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
-                            .background(Color(hex: "#6366f1"), in: Capsule())
-                            .contentShape(Capsule())
-                    }
-
-                    Spacer()
-
                     if gameVariant == .kingOfTheBoard {
                         Text("Bots are disabled in King of the Board.")
                             .font(.caption.weight(.semibold))
@@ -637,6 +644,8 @@ struct NativeLobbyView: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                         }
+
+                        Spacer()
                     }
                 }
             }
@@ -727,11 +736,26 @@ struct NativeLobbyView: View {
     }
 
     private func syncLocalSettings(from roomInfo: RoomInfo?) {
+        isSyncingFromServer = true
         timer = roomInfo?.turnTimeLimit ?? 0
         sequences = roomInfo?.sequencesToWin ?? 2
         sequenceLength = roomInfo?.sequenceLength ?? 5
         seriesLength = roomInfo?.seriesLength ?? 0
         gameVariant = roomInfo?.gameVariant ?? .classic
+        DispatchQueue.main.async { isSyncingFromServer = false }
+    }
+
+    private func autoApplySettings() {
+        guard !isSyncingFromServer else { return }
+        Task {
+            await model.updateRoomSettings(
+                turnTimeLimit: timer,
+                sequencesToWin: gameVariant == .kingOfTheBoard ? nil : sequences,
+                sequenceLength: gameVariant == .kingOfTheBoard ? 5 : sequenceLength,
+                seriesLength: seriesLength,
+                gameVariant: gameVariant
+            )
+        }
     }
 }
 
@@ -740,12 +764,15 @@ struct NativeLobbyView: View {
 private struct LobbySettingsStrip: View {
     let roomInfo: RoomInfo
 
+    private var isKotB: Bool { roomInfo.gameVariant == .kingOfTheBoard }
+
     var body: some View {
         HStack(spacing: 0) {
             LobbyInfoChip(icon: "person.2.fill", value: "\(roomInfo.teamCount) Teams")
             LobbyInfoChip(
-                icon: roomInfo.gameVariant == .kingOfTheBoard ? "crown.fill" : "square.grid.3x3.fill",
-                value: roomInfo.gameVariant == .kingOfTheBoard ? "King Zone" : (roomInfo.sequenceLength == 4 ? "Blitz" : "Standard")
+                icon: isKotB ? "crown.fill" : "square.grid.3x3.fill",
+                value: isKotB ? "King Zone" : (roomInfo.sequenceLength == 4 ? "Blitz" : "Standard"),
+                tintColor: isKotB ? Color(hex: "#facc15") : nil
             )
             LobbyInfoChip(icon: "trophy.fill", value: roomInfo.seriesLength == 0 ? "Single" : "Bo\(roomInfo.seriesLength)")
             LobbyInfoChip(icon: "timer", value: roomInfo.turnTimeLimit == 0 ? "No Timer" : "\(roomInfo.turnTimeLimit)s")
@@ -756,12 +783,13 @@ private struct LobbySettingsStrip: View {
 private struct LobbyInfoChip: View {
     let icon: String
     let value: String
+    var tintColor: Color? = nil
 
     var body: some View {
         VStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(tintColor ?? .white.opacity(0.4))
             Text(value)
                 .font(.caption2.weight(.bold))
         }
@@ -837,12 +865,14 @@ private struct LobbySegmentPicker<T: Hashable>: View {
     let options: [(T, String)]
     var disabled = false
     var disabledOptions: Set<T> = []
+    var activeColor: Color? = nil
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(Array(options.enumerated()), id: \.offset) { _, option in
                 let isSelected = selection == option.0
                 let isOptionDisabled = disabled || disabledOptions.contains(option.0)
+                let selectedColor = activeColor ?? Color(hex: "#6366f1")
                 Button(action: {
                     guard !isOptionDisabled else { return }
                     NativeHaptics.selection()
@@ -856,7 +886,7 @@ private struct LobbySegmentPicker<T: Hashable>: View {
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
                         .background(
-                            isSelected ? Color(hex: "#6366f1") : Color.white.opacity(isOptionDisabled ? 0.03 : 0.06),
+                            isSelected ? selectedColor : Color.white.opacity(isOptionDisabled ? 0.03 : 0.06),
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                         )
                         .foregroundStyle(isOptionDisabled ? .white.opacity(0.35) : .white)
@@ -1136,31 +1166,49 @@ private struct CompactGameHeader: View {
     let playerID: String?
     let turnTimeLimit: Int
     let turnStartedAt: Double?
+    var gameVariant: GameVariant = .classic
     let onBack: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: onBack) {
-                Image(systemName: "chevron.left")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 36, height: 36)
-                    .contentShape(Rectangle())
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
+                }
+
+                if gameVariant == .kingOfTheBoard {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(colors: [Color(hex: "#facc15"), Color(hex: "#f59e0b")],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                }
+
+                Spacer()
+
+                TurnIndicatorView(state: state, playerID: playerID)
+
+                Spacer()
+
+                if turnTimeLimit > 0, state?.winnerTeamIndex == nil {
+                    TurnTimerPill(turnTimeLimit: turnTimeLimit, turnStartedAt: turnStartedAt, isCompact: true)
+                } else {
+                    Color.clear.frame(width: 36, height: 36)
+                }
             }
+            .padding(.horizontal, 16)
+            .frame(height: 50)
 
-            Spacer()
-
-            TurnIndicatorView(state: state, playerID: playerID)
-
-            Spacer()
-
-            if turnTimeLimit > 0, state?.winnerTeamIndex == nil {
-                TurnTimerPill(turnTimeLimit: turnTimeLimit, turnStartedAt: turnStartedAt, isCompact: true)
-            } else {
-                Color.clear.frame(width: 36, height: 36)
+            if gameVariant == .kingOfTheBoard {
+                LinearGradient(colors: [Color(hex: "#facc15").opacity(0.3), Color(hex: "#f59e0b").opacity(0.1)],
+                               startPoint: .leading, endPoint: .trailing)
+                    .frame(height: 1)
             }
         }
-        .padding(.horizontal, 16)
-        .frame(height: 50)
     }
 }
 
@@ -1254,9 +1302,33 @@ private struct CompactScoreStrip: View {
     let teamColors: [TeamColor]
     let scores: [Int]
     let scoreToWin: Int
+    var gameVariant: GameVariant = .classic
     @State private var glowingTeam: Int?
 
     var body: some View {
+        Group {
+            if gameVariant == .kingOfTheBoard {
+                kingOfTheBoardStrip
+            } else {
+                classicStrip
+            }
+        }
+        .onChange(of: scores) { oldValue, newValue in
+            for index in newValue.indices {
+                let old = oldValue[safe: index] ?? 0
+                if newValue[index] > old {
+                    glowingTeam = index
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        glowingTeam = nil
+                    }
+                    break
+                }
+            }
+        }
+    }
+
+    private var classicStrip: some View {
         HStack(spacing: 14) {
             ForEach(Array(teamColors.enumerated()), id: \.offset) { index, color in
                 HStack(spacing: 6) {
@@ -1286,18 +1358,118 @@ private struct CompactScoreStrip: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 36)
-        .onChange(of: scores) { oldValue, newValue in
-            for index in newValue.indices {
-                let old = oldValue[safe: index] ?? 0
-                if newValue[index] > old {
-                    glowingTeam = index
-                    Task {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        glowingTeam = nil
+    }
+
+    private var kingOfTheBoardStrip: some View {
+        HStack(spacing: 12) {
+            ForEach(Array(teamColors.enumerated()), id: \.offset) { index, color in
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color(hex: color.classicHex))
+                        .frame(width: 28, height: 28)
+                        .overlay {
+                            Text(color.letter)
+                                .font(.system(size: 12, weight: .black))
+                        }
+                        .shadow(color: glowingTeam == index ? Color(hex: color.classicHex).opacity(0.9) : .clear, radius: 10)
+
+                    Text("\(scores[safe: index] ?? 0)/\(scoreToWin)")
+                        .font(.system(size: 20, weight: .black, design: .rounded).monospacedDigit())
+
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(colors: [Color(hex: "#facc15"), Color(hex: "#f59e0b")],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.05), in: Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 52)
+    }
+}
+
+private struct KingZoneScoringLegend: View {
+    let onInfoTap: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "crown.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(hex: "#facc15"))
+            Text("Zone = 2 pts")
+                .font(.caption2.weight(.semibold))
+            Text("\u{00B7}")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white.opacity(0.4))
+            Text("Normal = 1 pt")
+                .font(.caption2.weight(.semibold))
+            Text("\u{00B7}")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white.opacity(0.4))
+            Text("First to 3 wins")
+                .font(.caption2.weight(.semibold))
+            Button(action: onInfoTap) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .foregroundStyle(.white.opacity(0.65))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
+    }
+}
+
+private struct KingZoneScoringInfoModal: View {
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.72)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
+            NativeCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(
+                                LinearGradient(colors: [Color(hex: "#facc15"), Color(hex: "#f59e0b")],
+                                               startPoint: .top, endPoint: .bottom)
+                            )
+                        Text("King of the Board")
+                            .font(.headline.weight(.black))
+                        Spacer()
                     }
-                    break
+                    Text("Teams fight over a shared 3x3 king zone on the board.")
+                        .foregroundStyle(.white.opacity(0.78))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Scoring")
+                            .font(.subheadline.weight(.bold))
+                        Text("Any sequence through the king zone scores 2 points.")
+                            .foregroundStyle(.white.opacity(0.72))
+                        Text("Sequences outside the zone score 1 point.")
+                            .foregroundStyle(.white.opacity(0.72))
+                        Text("First team to 3 points wins the game.")
+                            .foregroundStyle(.white.opacity(0.72))
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Tips")
+                            .font(.subheadline.weight(.bold))
+                        Text("Save flexible cards and jacks for the hotspot.")
+                            .foregroundStyle(.white.opacity(0.72))
+                        Text("A safe 1-point line outside the zone can still win races.")
+                            .foregroundStyle(.white.opacity(0.72))
+                    }
+                    NativePrimaryButton(title: "Got It", action: onDismiss)
                 }
             }
+            .padding(.horizontal, 20)
         }
     }
 }
@@ -1305,12 +1477,19 @@ private struct CompactScoreStrip: View {
 private struct GameEventToast: View {
     let text: String
     let teamColor: Color
+    var icon: String? = nil
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(teamColor)
-                .frame(width: 6, height: 6)
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(teamColor)
+            } else {
+                Circle()
+                    .fill(teamColor)
+                    .frame(width: 6, height: 6)
+            }
             Text(text)
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
@@ -1331,8 +1510,11 @@ struct NativeGameView: View {
     @State private var sequenceCelebration: SequenceCelebrationState?
     @State private var previousScores: [Int] = []
     @State private var lastEventCount = 0
-    @State private var activeToast: (text: String, color: Color)?
+    @State private var activeToast: (text: String, color: Color, icon: String?)?
     @State private var chipAnimationTrigger: String = ""
+    @State private var scorePopText: String?
+    @State private var scorePopUsedKingZone: Bool = false
+    @State private var showGameModeInfo = false
 
     private var state: ClientGameState? { model.gameState }
     private let boardSpacing: CGFloat = 2
@@ -1367,14 +1549,23 @@ struct NativeGameView: View {
 
     @ViewBuilder
     private var turnBackgroundGlow: some View {
-        if let state, let playerID = model.playerID, isMyTurn(state: state, playerID: playerID) {
-            let myTeamIndex = state.players.first(where: { $0.id == playerID })?.teamIndex ?? 0
-            let tc = state.config.teamColors[safe: myTeamIndex] ?? .blue
-            RadialGradient(
-                colors: [Color(hex: tc.classicHex).opacity(0.08), .clear],
-                center: .center, startRadius: 50, endRadius: 300
-            )
-            .ignoresSafeArea()
+        ZStack {
+            if let state, state.config.gameVariant == .kingOfTheBoard {
+                RadialGradient(
+                    colors: [Color(hex: "#facc15").opacity(0.04), .clear],
+                    center: .center, startRadius: 40, endRadius: 280
+                )
+                .ignoresSafeArea()
+            }
+            if let state, let playerID = model.playerID, isMyTurn(state: state, playerID: playerID) {
+                let myTeamIndex = state.players.first(where: { $0.id == playerID })?.teamIndex ?? 0
+                let tc = state.config.teamColors[safe: myTeamIndex] ?? .blue
+                RadialGradient(
+                    colors: [Color(hex: tc.classicHex).opacity(0.08), .clear],
+                    center: .center, startRadius: 50, endRadius: 300
+                )
+                .ignoresSafeArea()
+            }
         }
     }
 
@@ -1386,6 +1577,7 @@ struct NativeGameView: View {
                 playerID: model.playerID,
                 turnTimeLimit: state?.turnTimeLimit ?? 0,
                 turnStartedAt: state?.turnStartedAt,
+                gameVariant: state?.config.gameVariant ?? .classic,
                 onBack: { model.leaveRoom() }
             )
 
@@ -1407,9 +1599,33 @@ struct NativeGameView: View {
         CompactScoreStrip(
             teamColors: state.config.teamColors,
             scores: state.teamScores,
-            scoreToWin: state.config.scoreToWin
+            scoreToWin: state.config.scoreToWin,
+            gameVariant: state.config.gameVariant
         )
         .padding(.horizontal, 16)
+        .overlay(alignment: .top) {
+            if let scorePopText {
+                HStack(spacing: 4) {
+                    Text(scorePopText)
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                    if scorePopUsedKingZone {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Color(hex: "#facc15"))
+                    }
+                }
+                .foregroundStyle(scorePopUsedKingZone ? Color(hex: "#facc15") : .white)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .offset(y: -28)
+            }
+        }
+
+        if state.config.gameVariant == .kingOfTheBoard {
+            KingZoneScoringLegend {
+                showGameModeInfo = true
+            }
+            .padding(.horizontal, 16)
+        }
 
         GameBoardGrid(
             state: state,
@@ -1437,13 +1653,19 @@ struct NativeGameView: View {
     @ViewBuilder
     private var toastOverlay: some View {
         if let toast = activeToast {
-            GameEventToast(text: toast.text, teamColor: toast.color)
+            GameEventToast(text: toast.text, teamColor: toast.color, icon: toast.icon)
                 .padding(.top, 54)
         }
     }
 
     @ViewBuilder
     private var modalOverlays: some View {
+        if showGameModeInfo {
+            KingZoneScoringInfoModal {
+                showGameModeInfo = false
+            }
+        }
+
         if showCutCards, let state, let cutCards = state.cutCards {
             NativeCutCardsModal(cutCards: cutCards, dealerIndex: state.dealerIndex, players: state.players) {
                 showCutCards = false
@@ -1615,6 +1837,9 @@ struct NativeGameView: View {
             return "Draw to finish your turn."
         }
         if selectedCard == nil {
+            if state.config.gameVariant == .kingOfTheBoard {
+                return "Select a card. Aim for the crown zone for 2x points!"
+            }
             return "Select a card from your hand."
         }
         return "Select a highlighted space on the board."
@@ -1634,31 +1859,56 @@ struct NativeGameView: View {
         for index in currentScores.indices {
             let previous = previousScores[safe: index] ?? 0
             if currentScores[index] > previous {
-                if lastScoringPlayer?.id == playerID {
-                    continue
-                }
-                let players = state.players
-                    .filter { $0.teamIndex == index }
-                    .map(\.name)
                 let scoring = lastScoringTeamIndex == index ? state.lastMove?.scoring : nil
                 let pointsAwarded = scoring?.pointsAwarded ?? (currentScores[index] - previous)
                 let totalScore = scoring?.totalScore ?? currentScores[index]
                 let usedKingZone = scoring?.usedKingZone ?? (pointsAwarded > 1)
-                sequenceCelebration = SequenceCelebrationState(
-                    teamIndex: index,
-                    teamColor: state.config.teamColors[safe: index] ?? .blue,
-                    playerNames: players,
-                    pointsAwarded: pointsAwarded,
-                    totalScore: totalScore,
-                    usedKingZone: usedKingZone,
-                    scoreToWin: state.config.scoreToWin,
-                    gameVariant: state.config.gameVariant
-                )
+                let isLocalScorer = lastScoringPlayer?.id == playerID
+
+                // Score pop animation for KotB — always show, even for local scorer
+                if state.config.gameVariant == .kingOfTheBoard {
+                    scorePopUsedKingZone = usedKingZone
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                        scorePopText = "+\(pointsAwarded)"
+                    }
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_200_000_000)
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            scorePopText = nil
+                        }
+                    }
+                }
+
+                // Haptics — always fire for scoring events
                 if index == state.players.first(where: { $0.id == playerID })?.teamIndex {
                     NativeHaptics.notify(.success)
+                    if usedKingZone {
+                        Task {
+                            try? await Task.sleep(nanoseconds: 300_000_000)
+                            NativeHaptics.impact(.heavy)
+                        }
+                    }
                 } else {
                     NativeHaptics.impact(.heavy)
                 }
+
+                // Celebration modal — skip for local scorer (they see their own move result)
+                if !isLocalScorer {
+                    let players = state.players
+                        .filter { $0.teamIndex == index }
+                        .map(\.name)
+                    sequenceCelebration = SequenceCelebrationState(
+                        teamIndex: index,
+                        teamColor: state.config.teamColors[safe: index] ?? .blue,
+                        playerNames: players,
+                        pointsAwarded: pointsAwarded,
+                        totalScore: totalScore,
+                        usedKingZone: usedKingZone,
+                        scoreToWin: state.config.scoreToWin,
+                        gameVariant: state.config.gameVariant
+                    )
+                }
+
                 break
             }
         }
@@ -1723,9 +1973,12 @@ struct NativeGameView: View {
 
             let teamIndex = event.teamIndex ?? 0
             let color = state.config.teamColors[safe: teamIndex] ?? .blue
+            let isKingZoneEvent = event.type == "sequence-completed" && event.usedKingZone == true
+            let toastColor = isKingZoneEvent ? Color(hex: "#facc15") : Color(hex: color.classicHex)
+            let toastIcon: String? = isKingZoneEvent ? "crown.fill" : nil
 
             withAnimation(.easeInOut(duration: 0.3)) {
-                activeToast = (text: text, color: Color(hex: color.classicHex))
+                activeToast = (text: text, color: toastColor, icon: toastIcon)
             }
             Task {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -1921,6 +2174,7 @@ private struct GameBoardGrid: View {
                         isSequenceCell: sequenceCells[cellKey] != nil,
                         sequenceTeamIndex: sequenceCells[cellKey],
                         isKingZoneCell: kingZone?.cells.contains(where: { $0 == [row, col] }) == true,
+                        isKingZoneCenter: kingZone?.center == [row, col],
                         size: cellSize,
                         animationTrigger: chipAnimationTrigger
                     )
@@ -1946,11 +2200,13 @@ private struct BoardCellView: View {
     let isSequenceCell: Bool
     let sequenceTeamIndex: Int?
     let isKingZoneCell: Bool
+    let isKingZoneCenter: Bool
     let size: CGFloat
     let animationTrigger: String
 
     init(card: String, chip: Int?, teamColors: [TeamColor], highlighted: Bool, selected: Bool,
-         isSequenceCell: Bool = false, sequenceTeamIndex: Int? = nil, isKingZoneCell: Bool = false, size: CGFloat, animationTrigger: String = "") {
+         isSequenceCell: Bool = false, sequenceTeamIndex: Int? = nil, isKingZoneCell: Bool = false,
+         isKingZoneCenter: Bool = false, size: CGFloat, animationTrigger: String = "") {
         self.card = card
         self.chip = chip
         self.teamColors = teamColors
@@ -1959,6 +2215,7 @@ private struct BoardCellView: View {
         self.isSequenceCell = isSequenceCell
         self.sequenceTeamIndex = sequenceTeamIndex
         self.isKingZoneCell = isKingZoneCell
+        self.isKingZoneCenter = isKingZoneCenter
         self.size = size
         self.animationTrigger = animationTrigger
     }
@@ -2002,16 +2259,38 @@ private struct BoardCellView: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(
                         RadialGradient(
-                            colors: [Color(hex: "#facc15").opacity(0.26), Color(hex: "#f59e0b").opacity(0.12), .clear],
+                            colors: [Color(hex: "#facc15").opacity(0.35), Color(hex: "#f59e0b").opacity(0.18), .clear],
                             center: .center,
                             startRadius: 4,
                             endRadius: size * 0.6
                         )
                     )
+                    .modifier(KingZoneShimmer())
                     .overlay {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color(hex: "#facc15").opacity(0.35), lineWidth: 1)
+                            .stroke(Color(hex: "#facc15").opacity(0.5), lineWidth: 1.5)
                     }
+                    .modifier(KingZonePulse())
+            }
+
+            // Crown icon + 2x badge on king zone center when no chip
+            if isKingZoneCenter && chip == nil {
+                VStack(spacing: 0) {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: max(6, size * 0.24), weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(colors: [Color(hex: "#facc15"), Color(hex: "#f59e0b")],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                        .opacity(0.85)
+                    Text("2x")
+                        .font(.system(size: max(5, size * 0.16), weight: .black, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(colors: [Color(hex: "#facc15"), Color(hex: "#f59e0b")],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                        .opacity(0.8)
+                }
             }
 
             // Chip
@@ -2049,7 +2328,7 @@ private struct BoardCellView: View {
             return Color(hex: color.classicHex).opacity(0.1)
         }
         if isKingZoneCell {
-            return Color(hex: "#f59e0b").opacity(0.08)
+            return Color(hex: "#f59e0b").opacity(0.12)
         }
         return Color.white.opacity(0.06)
     }
@@ -2066,7 +2345,7 @@ private struct BoardCellView: View {
                 .modifier(HighlightPulse())
         } else if isKingZoneCell {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color(hex: "#facc15").opacity(0.28), lineWidth: 1)
+                .stroke(Color(hex: "#facc15").opacity(0.5), lineWidth: 1.5)
         } else if isSequenceCell, let seqTeam = sequenceTeamIndex, let color = teamColors[safe: seqTeam] {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .stroke(Color(hex: color.classicHex).opacity(0.3), lineWidth: 1)
@@ -2087,7 +2366,43 @@ private struct HighlightPulse: ViewModifier {
     }
 }
 
-private struct StatValue: View {
+private struct KingZoneShimmer: ViewModifier {
+    @State private var phase: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: max(0, phase - 0.15)),
+                        .init(color: Color(hex: "#facc15").opacity(0.25), location: phase),
+                        .init(color: .clear, location: min(1, phase + 0.15))
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+            .onAppear {
+                withAnimation(.linear(duration: 2.5).repeatForever(autoreverses: false)) {
+                    phase = 1.0
+                }
+            }
+    }
+}
+
+private struct KingZonePulse: ViewModifier {
+    @State private var glowing = false
+
+    func body(content: Content) -> some View {
+        content
+            .shadow(color: Color(hex: "#facc15").opacity(glowing ? 0.5 : 0.15), radius: 4)
+            .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: glowing)
+            .onAppear { glowing = true }
+    }
+}
+
+struct StatValue: View {
     let title: String
     let value: String
 

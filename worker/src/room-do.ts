@@ -592,6 +592,12 @@ export class RoomDO {
       return;
     }
 
+    const tags = this.state.getTags(ws);
+    const authenticatedUserId = tags[4] || undefined;
+    if (authenticatedUserId && player.userId !== authenticatedUserId) {
+      player.userId = authenticatedUserId;
+    }
+
     // Clean up old WebSocket for this player (prevents stale close from marking player disconnected)
     const oldWs = this.playerToWs.get(player.id);
     if (oldWs && oldWs !== ws) {
@@ -614,12 +620,19 @@ export class RoomDO {
     // Always cancel cleanup timer (any player reconnecting means room is alive)
     await this.clearTimer('cleanup');
 
-    // Cancel any pending disconnect skip. Once a human reconnects, the room should stop
-    // carrying a stale skip timer that can race the recovered socket attachment.
-    await this.clearTimer('disconnect-skip');
+    const currentPlayer = this.room.gameState
+      ? this.room.gameState.players[this.room.gameState.currentPlayerIndex]
+      : null;
+    const waitingOnDisconnectedCurrentPlayer = !!currentPlayer && !currentPlayer.isBot && !currentPlayer.connected;
 
-    if (this.room.gameState &&
-        this.room.gameState.players[this.room.gameState.currentPlayerIndex].id === player.id) {
+    // Only clear the skip timer when the reconnect resolves the blocked turn. If another
+    // player reconnects while the current player is still offline, keep the skip armed so
+    // the room cannot stall behind a disconnected turn forever.
+    if (!waitingOnDisconnectedCurrentPlayer || currentPlayer?.id === player.id) {
+      await this.clearTimer('disconnect-skip');
+    }
+
+    if (this.room.gameState && currentPlayer?.id === player.id) {
       if (this.room.gameState.turnTimeLimit > 0) {
         this.room.gameState.turnStartedAt = Date.now();
         await this.startTurnTimer();

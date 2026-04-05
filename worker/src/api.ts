@@ -4,11 +4,12 @@ import { authenticate, requireAuth } from './middleware.js';
 import {
   getUserByAppleSub, getUserById, getUserByUsername, createUser,
   updateUserProfile, updateApnsToken, deleteApnsToken, searchUsersByPrefix, updateLastSeen,
-  getUserStats, getGameHistory,
+  getUserStats, getGameHistory, getDetailedStats, getHeadToHead, getFriendCount, getFriendStatus,
   getFriends, getPendingFriendRequests, sendFriendRequest,
   acceptFriendRequest, rejectFriendRequest, removeFriend, getFriendship,
   createGameInvite,
 } from './db/queries.js';
+import type { ModeBreakdown, DetailedStats, HeadToHeadStats, GameHistorySummary } from '../../shared/types.js';
 import { sendPushNotification } from './apns.js';
 
 // ============================================
@@ -102,7 +103,7 @@ export async function handleApiRequest(request: Request, env: Env, path: string)
     }
     if (path.startsWith('/api/profile/') && request.method === 'GET') {
       const username = path.slice('/api/profile/'.length);
-      return handleGetProfile(username, env);
+      return handleGetProfile(username, env, request);
     }
 
     // ========== FRIENDS ==========
@@ -130,8 +131,19 @@ export async function handleApiRequest(request: Request, env: Env, path: string)
     if (path === '/api/stats/me' && request.method === 'GET') {
       return handleGetMyStats(request, env);
     }
+    if (path === '/api/stats/me/detailed' && request.method === 'GET') {
+      return handleGetMyDetailedStats(request, env);
+    }
     if (path === '/api/stats/me/history' && request.method === 'GET') {
       return handleGetMyHistory(request, env);
+    }
+    if (path.startsWith('/api/stats/head-to-head/') && request.method === 'GET') {
+      const userId = path.slice('/api/stats/head-to-head/'.length);
+      return handleGetHeadToHead(request, env, userId);
+    }
+    if (path.endsWith('/detailed') && path.startsWith('/api/stats/') && request.method === 'GET') {
+      const username = path.slice('/api/stats/'.length, -'/detailed'.length);
+      return handleGetUserDetailedStats(username, request, env);
     }
     if (path.startsWith('/api/stats/') && request.method === 'GET') {
       const username = path.slice('/api/stats/'.length);
@@ -380,26 +392,34 @@ async function handleSearchProfiles(request: Request, env: Env): Promise<Respons
     return json({ results: [] });
   }
 
-  const users = await searchUsersByPrefix(env.DB, query.toLowerCase(), 20);
+  const users = await searchUsersByPrefix(env.DB, query.toLowerCase(), 20, authResult.userId);
 
   return json({
-    results: users
-      .filter(u => u.id !== authResult.userId)
-      .map(u => ({
-        id: u.id,
-        username: u.username,
-        displayName: u.display_name,
-        avatarId: u.avatar_id,
-        avatarColor: u.avatar_color,
-      })),
+    results: users.map(u => ({
+      id: u.id,
+      username: u.username,
+      displayName: u.display_name,
+      avatarId: u.avatar_id,
+      avatarColor: u.avatar_color,
+      friendStatus: (u as any).friend_status ?? 'none',
+    })),
   });
 }
 
-async function handleGetProfile(username: string, env: Env): Promise<Response> {
+async function handleGetProfile(username: string, env: Env, request?: Request): Promise<Response> {
   const user = await getUserByUsername(env.DB, username.toLowerCase());
   if (!user) return json({ error: 'User not found' }, 404);
 
   const stats = await getUserStats(env.DB, user.id);
+  const friendCount = await getFriendCount(env.DB, user.id);
+
+  let friendStatus = 'none';
+  if (request) {
+    const authResult = await authenticate(request, env);
+    if (authResult && authResult.userId !== user.id) {
+      friendStatus = await getFriendStatus(env.DB, authResult.userId, user.id);
+    }
+  }
 
   return json({
     user: {
@@ -411,6 +431,8 @@ async function handleGetProfile(username: string, env: Env): Promise<Response> {
       createdAt: user.created_at,
     },
     stats: stats ? formatStats(stats) : emptyStats(),
+    friendStatus,
+    friendCount,
   });
 }
 
@@ -552,7 +574,17 @@ async function handleGetMyHistory(request: Request, env: Env): Promise<Response>
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20') || 0, 1), 50);
   const offset = Math.min(Math.max(parseInt(url.searchParams.get('offset') || '0') || 0, 0), 10000);
 
-  const history = await getGameHistory(env.DB, authResult.userId, limit, offset);
+  const filters: { mode?: string; difficulty?: string; variant?: string; result?: string } = {};
+  const mode = url.searchParams.get('mode');
+  if (mode === 'bot' || mode === 'multiplayer') filters.mode = mode;
+  const difficulty = url.searchParams.get('difficulty');
+  if (difficulty) filters.difficulty = difficulty;
+  const variant = url.searchParams.get('variant');
+  if (variant) filters.variant = variant;
+  const result = url.searchParams.get('result');
+  if (result === 'wins' || result === 'losses') filters.result = result;
+
+  const history = await getGameHistory(env.DB, authResult.userId, limit, offset, filters);
 
   return json(history);
 }
@@ -649,6 +681,186 @@ async function handleInvite(request: Request, env: Env): Promise<Response> {
   }
 
   return json({ success: true, inviteId });
+}
+
+// ============================================
+// DETAILED STATS HANDLERS
+// ============================================
+
+function buildModeBreakdown(row: any): ModeBreakdown | null {
+  if (!row || row.games_played === 0) return null;
+  return {
+    gamesPlayed: row.games_played,
+    gamesWon: row.games_won,
+    winRate: row.games_played > 0 ? Math.round((row.games_won / row.games_played) * 100) : 0,
+    avgDurationMs: row.avg_duration_ms == null ? null : Math.round(row.avg_duration_ms),
+    fastestWinMs: row.fastest_win_ms ?? null,
+    totalSequences: row.total_sequences ?? 0,
+  };
+}
+
+function formatPlayTime(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
+  const hours = Math.floor(ms / 3_600_000);
+  const minutes = Math.round((ms % 3_600_000) / 60_000);
+  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+}
+
+function roundNullable(value: number | null | undefined, precision = 0): number | null {
+  if (value == null || Number.isNaN(value)) return null;
+  const multiplier = 10 ** precision;
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function favoriteTeamColorFromAggregate(gamesByTeamColor: Record<string, number>): string | null {
+  let favoriteColor: string | null = null;
+  let favoriteCount = 0;
+
+  for (const [color, count] of Object.entries(gamesByTeamColor)) {
+    if (count > favoriteCount) {
+      favoriteColor = color;
+      favoriteCount = count;
+    }
+  }
+
+  return favoriteColor;
+}
+
+interface DetailedInsightSource {
+  favoriteColor: string | null;
+  avgDuration: number | null;
+  avgTurns: number | null;
+  avgSequences: number | null;
+}
+
+interface InsightAggregateSource {
+  gamesPlayed: number;
+  gamesByTeamColor: Record<string, number>;
+  cardsPlayed: number;
+  twoEyedJacksUsed: number;
+  oneEyedJacksUsed: number;
+  firstMoveGames: number;
+  firstMoveWins: number;
+  totalTurnsTaken: number;
+  sequencesCompleted: number;
+  totalPlayTimeMs: number;
+}
+
+export function buildInsightsPayload(detailed: DetailedInsightSource, stats: InsightAggregateSource) {
+  const totalJacks = stats.twoEyedJacksUsed + stats.oneEyedJacksUsed;
+  const jackUsageRate = stats.cardsPlayed > 0 ? Math.round((totalJacks / stats.cardsPlayed) * 100) / 100 : 0;
+  const aggregateAvgDuration = stats.gamesPlayed > 0 ? roundNullable(stats.totalPlayTimeMs / stats.gamesPlayed) : null;
+  const aggregateAvgTurns = stats.gamesPlayed > 0 ? roundNullable(stats.totalTurnsTaken / stats.gamesPlayed, 1) : null;
+  const aggregateAvgSequences = stats.gamesPlayed > 0 ? roundNullable(stats.sequencesCompleted / stats.gamesPlayed, 1) : null;
+  const aggregateFavoriteTeamColor = favoriteTeamColorFromAggregate(stats.gamesByTeamColor);
+
+  return {
+    avgGameDurationMs: aggregateAvgDuration ?? roundNullable(detailed.avgDuration),
+    favoriteTeamColor: aggregateFavoriteTeamColor ?? detailed.favoriteColor,
+    jackUsageRate,
+    firstMoveWinRate: stats.firstMoveGames > 0 ? Math.round((stats.firstMoveWins / stats.firstMoveGames) * 100) : null,
+    avgTurnsPerGame: aggregateAvgTurns ?? roundNullable(detailed.avgTurns, 1),
+    avgSequencesPerGame: aggregateAvgSequences ?? roundNullable(detailed.avgSequences, 1),
+    totalPlayTimeFormatted: formatPlayTime(stats.totalPlayTimeMs),
+  };
+}
+
+async function buildDetailedStats(db: D1Database, userId: string, overallStats: any, memberSince: number): Promise<DetailedStats> {
+  const detailed = await getDetailedStats(db, userId);
+  const stats = overallStats ? formatStats(overallStats) : emptyStats();
+
+  const findMode = (rows: any[], key: string) => rows.find(r => r.group_key === key);
+
+  return {
+    overall: stats,
+    byMode: {
+      botEasy: buildModeBreakdown(findMode(detailed.botModes, 'easy')),
+      botMedium: buildModeBreakdown(findMode(detailed.botModes, 'medium')),
+      botHard: buildModeBreakdown(findMode(detailed.botModes, 'hard')),
+      botImpossible: buildModeBreakdown(findMode(detailed.botModes, 'impossible')),
+      multiplayer: buildModeBreakdown(detailed.multiplayer[0]),
+    },
+    byVariant: {
+      classic: buildModeBreakdown(findMode(detailed.variants, 'classic')),
+      kingOfTheBoard: buildModeBreakdown(findMode(detailed.variants, 'king-of-the-board')),
+    },
+    byFormat: {
+      standard: buildModeBreakdown(findMode(detailed.formats, '5')),
+      blitz: buildModeBreakdown(findMode(detailed.formats, '4')),
+    },
+    insights: buildInsightsPayload(detailed, stats),
+    series: {
+      played: stats.seriesPlayed,
+      won: stats.seriesWon,
+      lost: stats.seriesLost,
+      winRate: stats.seriesPlayed > 0 ? Math.round((stats.seriesWon / stats.seriesPlayed) * 100) : 0,
+    },
+    memberSince,
+  };
+}
+
+async function handleGetMyDetailedStats(request: Request, env: Env): Promise<Response> {
+  const authResult = await requireAuth(request, env);
+  if (authResult instanceof Response) return authResult;
+
+  const user = await getUserById(env.DB, authResult.userId);
+  if (!user) return json({ error: 'User not found' }, 404);
+
+  const overallStats = await getUserStats(env.DB, authResult.userId);
+  const result = await buildDetailedStats(env.DB, authResult.userId, overallStats, user.created_at);
+
+  return json(result);
+}
+
+async function handleGetUserDetailedStats(username: string, request: Request, env: Env): Promise<Response> {
+  const user = await getUserByUsername(env.DB, username.toLowerCase());
+  if (!user) return json({ error: 'User not found' }, 404);
+
+  const overallStats = await getUserStats(env.DB, user.id);
+  const result = await buildDetailedStats(env.DB, user.id, overallStats, user.created_at);
+
+  return json(result);
+}
+
+async function handleGetHeadToHead(request: Request, env: Env, theirUserId: string): Promise<Response> {
+  const authResult = await requireAuth(request, env);
+  if (authResult instanceof Response) return authResult;
+
+  const { aggregates, recentGames: recentRows } = await getHeadToHead(env.DB, authResult.userId, theirUserId);
+
+  // Headline wins only count opposing-team games (direct competition)
+  const myWins = aggregates.opposite_my_wins;
+  const theirWins = aggregates.opposite_their_wins;
+  const gamesPlayed = aggregates.total_games;
+
+  const recentGames: GameHistorySummary[] = recentRows.map(row => ({
+    id: row.game_id,
+    endedAt: row.ended_at,
+    durationMs: row.duration_ms,
+    gameVariant: row.game_variant,
+    botDifficulty: row.bot_difficulty,
+    wasStalemate: !!row.was_stalemate,
+    myWon: !!row.my_won,
+    myTeamColor: row.my_team_color,
+    playerCount: row.player_count,
+  }));
+
+  const oppositeGames = aggregates.opposite_games;
+
+  const result: HeadToHeadStats = {
+    gamesPlayed,
+    myWins,
+    theirWins,
+    myWinRate: oppositeGames > 0 ? Math.round((myWins / oppositeGames) * 100) : 0,
+    sameTeamGames: aggregates.same_team_games,
+    sameTeamWins: aggregates.same_team_wins,
+    oppositeTeamGames: oppositeGames,
+    oppositeTeamMyWins: myWins,
+    recentGames,
+  };
+
+  return json(result);
 }
 
 // ============================================

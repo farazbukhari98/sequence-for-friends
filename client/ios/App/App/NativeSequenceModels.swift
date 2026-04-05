@@ -7,6 +7,8 @@ enum NativeScreen: String {
     case home
     case profile
     case friends
+    case friendProfile
+    case gameHistory
     case lobby
     case game
 }
@@ -100,8 +102,17 @@ struct ProfileResponse: Codable {
     let stats: UserStats
 }
 
+struct SearchResult: Codable, Identifiable, Equatable {
+    let id: String
+    let username: String
+    let displayName: String
+    let avatarId: String
+    let avatarColor: String
+    let friendStatus: String
+}
+
 struct SearchProfilesResponse: Codable {
-    let results: [FriendInfo]
+    let results: [SearchResult]
 }
 
 struct FriendsResponse: Codable {
@@ -189,6 +200,131 @@ struct FriendRequest: Codable, Identifiable, Equatable {
     let sentAt: Double
 
     var id: String { userId }
+}
+
+// MARK: - Detailed Stats Models
+
+struct ModeBreakdown: Codable, Equatable {
+    let gamesPlayed: Int
+    let gamesWon: Int
+    let winRate: Int
+    let avgDurationMs: Int?
+    let fastestWinMs: Int?
+    let totalSequences: Int
+}
+
+struct StatsInsights: Codable, Equatable {
+    let avgGameDurationMs: Int?
+    let favoriteTeamColor: String?
+    let jackUsageRate: Double
+    let firstMoveWinRate: Int?
+    let avgTurnsPerGame: Double?
+    let avgSequencesPerGame: Double?
+    let totalPlayTimeFormatted: String
+}
+
+struct SeriesStats: Codable, Equatable {
+    let played: Int
+    let won: Int
+    let lost: Int
+    let winRate: Int
+}
+
+struct ModeBreakdowns: Codable, Equatable {
+    let botEasy: ModeBreakdown?
+    let botMedium: ModeBreakdown?
+    let botHard: ModeBreakdown?
+    let botImpossible: ModeBreakdown?
+    let multiplayer: ModeBreakdown?
+}
+
+struct VariantBreakdowns: Codable, Equatable {
+    let classic: ModeBreakdown?
+    let kingOfTheBoard: ModeBreakdown?
+}
+
+struct FormatBreakdowns: Codable, Equatable {
+    let standard: ModeBreakdown?
+    let blitz: ModeBreakdown?
+}
+
+struct DetailedStatsResponse: Codable, Equatable {
+    let overall: UserStats
+    let byMode: ModeBreakdowns
+    let byVariant: VariantBreakdowns
+    let byFormat: FormatBreakdowns
+    let insights: StatsInsights
+    let series: SeriesStats
+    let memberSince: Double
+}
+
+struct HeadToHeadResponse: Codable, Equatable {
+    let gamesPlayed: Int
+    let myWins: Int
+    let theirWins: Int
+    let myWinRate: Int
+    let sameTeamGames: Int
+    let sameTeamWins: Int
+    let oppositeTeamGames: Int
+    let oppositeTeamMyWins: Int
+    let recentGames: [GameHistorySummary]
+}
+
+struct GameHistorySummary: Codable, Identifiable, Equatable {
+    let id: String
+    let endedAt: Double
+    let durationMs: Int
+    let gameVariant: String
+    let botDifficulty: String?
+    let wasStalemate: Bool
+    let myWon: Bool
+    let myTeamColor: String
+    let playerCount: Int
+}
+
+struct FriendProfileResponse: Codable, Equatable {
+    let user: UserProfile
+    let stats: UserStats
+    let friendStatus: String
+    let friendCount: Int
+}
+
+struct GameHistoryGame: Codable {
+    let id: String
+    let endedAt: Int
+    let durationMs: Int
+    let playerCount: Int
+    let gameVariant: String
+    let botDifficulty: String?
+    let wasStalemate: Int
+    let participants: [GameHistoryParticipant]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case endedAt = "ended_at"
+        case durationMs = "duration_ms"
+        case playerCount = "player_count"
+        case gameVariant = "game_variant"
+        case botDifficulty = "bot_difficulty"
+        case wasStalemate = "was_stalemate"
+        case participants
+    }
+}
+
+struct GameHistoryParticipant: Codable {
+    let userId: String
+    let won: Int
+    let teamColor: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case won
+        case teamColor = "team_color"
+    }
+}
+
+struct GameHistoryResponse: Codable {
+    let games: [GameHistoryGame]
 }
 
 struct SeriesState: Codable, Equatable {

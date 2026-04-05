@@ -212,6 +212,9 @@ export function addPlayerToRoom(room: Room, playerName: string, token?: string, 
     const existingPlayer = room.players.find(p => p.token === token);
     if (existingPlayer) {
       existingPlayer.connected = true;
+      if (userId && existingPlayer.userId !== userId) {
+        existingPlayer.userId = userId;
+      }
       return existingPlayer;
     }
   }

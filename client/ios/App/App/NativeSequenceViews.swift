@@ -43,8 +43,45 @@ extension AppModel {
     }
 
     func openProfile() async {
+        guard let userId = user?.id else { return }
         screen = .profile
-        await loadProfile()
+        async let profileTask: () = loadProfile()
+        async let detailedTask: () = loadDetailedStats()
+        async let friendsTask: () = loadFriends()
+        async let recentTask: () = loadRecentGames(userId: userId)
+        _ = await (profileTask, detailedTask, friendsTask, recentTask)
+    }
+
+    func loadRecentGames(userId: String) async {
+        guard let token = sessionStore.sessionToken() else { return }
+        do {
+            let response: GameHistoryResponse = try await apiClient.request(path: "/api/stats/me/history?limit=5&offset=0", token: token)
+            let summaries = parseGameHistory(response.games, userId: userId)
+            recentGames = summaries
+            recentGamesStatusMessage = response.games.isEmpty || !summaries.isEmpty
+                ? nil
+                : "We found completed matches, but couldn't match them to your account history."
+        } catch {
+            recentGames = []
+            recentGamesStatusMessage = "Couldn't load recent game history right now."
+        }
+    }
+
+    private func parseGameHistory(_ games: [GameHistoryGame], userId: String) -> [GameHistorySummary] {
+        games.compactMap { game -> GameHistorySummary? in
+            guard let me = game.participants.first(where: { $0.userId == userId }) else { return nil }
+            return GameHistorySummary(
+                id: game.id,
+                endedAt: Double(game.endedAt),
+                durationMs: game.durationMs,
+                gameVariant: game.gameVariant,
+                botDifficulty: game.botDifficulty,
+                wasStalemate: game.wasStalemate != 0,
+                myWon: me.won != 0,
+                myTeamColor: me.teamColor,
+                playerCount: game.playerCount
+            )
+        }
     }
 
     func openFriends() async {
@@ -140,10 +177,97 @@ extension AppModel {
         }
     }
 
+    func loadDetailedStats() async {
+        guard let token = sessionStore.sessionToken() else { return }
+        do {
+            let response: DetailedStatsResponse = try await apiClient.request(path: "/api/stats/me/detailed", token: token)
+            detailedStats = response
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func loadFriendProfile(username: String) async {
+        guard let token = sessionStore.sessionToken() else { return }
+        do {
+            let response: FriendProfileResponse = try await apiClient.request(path: "/api/profile/\(username)", token: token)
+            viewingProfile = response
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func loadFriendDetailedStats(username: String) async {
+        do {
+            let response: DetailedStatsResponse = try await apiClient.request(path: "/api/stats/\(username)/detailed")
+            viewingDetailedStats = response
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func loadHeadToHead(userId: String) async {
+        guard let token = sessionStore.sessionToken() else { return }
+        do {
+            let response: HeadToHeadResponse = try await apiClient.request(path: "/api/stats/head-to-head/\(userId)", token: token)
+            headToHead = response
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func loadGameHistory(mode: String? = nil, difficulty: String? = nil, variant: String? = nil, result: String? = nil, offset: Int = 0) async {
+        guard let token = sessionStore.sessionToken(), let userId = user?.id else { return }
+        var path = "/api/stats/me/history?limit=20&offset=\(offset)"
+        if let mode { path += "&mode=\(mode)" }
+        if let difficulty { path += "&difficulty=\(difficulty)" }
+        if let variant { path += "&variant=\(variant)" }
+        if let result { path += "&result=\(result)" }
+
+        do {
+            let response: GameHistoryResponse = try await apiClient.request(path: path, token: token)
+            let summaries = parseGameHistory(response.games, userId: userId)
+            if offset == 0 {
+                gameHistoryList = summaries
+            } else {
+                gameHistoryList.append(contentsOf: summaries)
+            }
+            gameHistoryHasMore = summaries.count >= 20
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func openFriendProfile(_ friend: FriendInfo) async {
+        friendProfileUserId = friend.userId
+        viewingProfile = nil
+        viewingDetailedStats = nil
+        headToHead = nil
+        screen = .friendProfile
+        async let profileTask: () = loadFriendProfile(username: friend.username)
+        async let statsTask: () = loadFriendDetailedStats(username: friend.username)
+        async let h2hTask: () = loadHeadToHead(userId: friend.userId)
+        _ = await (profileTask, statsTask, h2hTask)
+    }
+
+    func openFriendProfileFromSearch(_ result: SearchResult) async {
+        let friend = FriendInfo(userId: result.id, username: result.username, displayName: result.displayName, avatarId: result.avatarId, avatarColor: result.avatarColor, since: nil, hasBeatImpossibleBot: nil)
+        await openFriendProfile(friend)
+    }
+
+    func openGameHistory() async {
+        gameHistoryList = []
+        gameHistoryHasMore = true
+        screen = .gameHistory
+        await loadGameHistory()
+    }
+
     func createRoom(roomName: String, maxPlayers: Int, teamCount: Int, turnTimeLimit: Int, sequencesToWin: Int) async {
         guard let playerName = user?.displayName else { return }
         do {
             errorMessage = nil
+            cancelRecovery()
+            sessionStore.saveRoomSession(nil)
             connectionStatus = .connecting("Creating room…")
             try await socketManager.connect(path: "/ws/create", authToken: sessionStore.sessionToken())
             let response: CreateRoomResponse = try await socketManager.request(type: "create-room", data: CreateRoomPayload(roomName: roomName, playerName: playerName, maxPlayers: maxPlayers, teamCount: teamCount, turnTimeLimit: turnTimeLimit, sequencesToWin: sequencesToWin))
@@ -164,6 +288,8 @@ extension AppModel {
         guard let playerName = user?.displayName else { return }
         do {
             errorMessage = nil
+            cancelRecovery()
+            sessionStore.saveRoomSession(nil)
             connectionStatus = .connecting("Creating bot game…")
             try await socketManager.connect(path: "/ws/create", authToken: sessionStore.sessionToken())
             let response: CreateRoomResponse = try await socketManager.request(type: "create-bot-game", data: CreateBotGamePayload(playerName: playerName, difficulty: difficulty, sequenceLength: sequenceLength, sequencesToWin: sequencesToWin, seriesLength: seriesLength))
@@ -184,6 +310,8 @@ extension AppModel {
         guard let playerName = user?.displayName else { return }
         do {
             errorMessage = nil
+            cancelRecovery()
+            sessionStore.saveRoomSession(nil)
             let normalized = code.uppercased()
             connectionStatus = .connecting("Joining room…")
             try await socketManager.connect(path: "/ws/room/\(normalized)", authToken: sessionStore.sessionToken())
@@ -218,6 +346,8 @@ struct RootContentView: View {
                 case .home: HomeView(model: model)
                 case .profile: ProfileView(model: model)
                 case .friends: FriendsView(model: model)
+                case .friendProfile: FriendProfileView(model: model)
+                case .gameHistory: GameHistoryView(model: model)
                 case .lobby: NativeLobbyView(model: model)
                 case .game: NativeGameView(model: model)
                 }
@@ -490,24 +620,220 @@ private struct HomeActionButton: View {
 
 struct ProfileView: View {
     @ObservedObject var model: AppModel
-    @State private var displayName = ""
-    @State private var avatarID = "bear"
-    @State private var avatarColor = "#6366f1"
+    @State private var showingEditSheet = false
+
+    private var detailed: DetailedStatsResponse? { model.detailedStats }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 HeaderBar(title: "Profile") { model.screen = .home }
-                AvatarPickerView(selectedAvatarID: $avatarID, selectedColor: $avatarColor)
-                TextField("Display Name", text: $displayName).textFieldStyle(.roundedBorder).padding(.horizontal, 24)
-                NativePrimaryButton(title: "Save Profile") { Task { await model.updateProfile(displayName: displayName, avatarID: avatarID, avatarColor: avatarColor) } }
+
+                // Profile Header
+                VStack(spacing: 10) {
+                    AvatarBubble(avatarID: model.user?.avatarId ?? "bear", avatarColor: model.user?.avatarColor ?? "#6366f1", size: 72)
+                    Text(model.user?.displayName ?? "").font(.title2.weight(.bold))
+                    Text("@\(model.user?.username ?? "")").foregroundStyle(.white.opacity(0.6))
+                    HStack(spacing: 16) {
+                        if let d = detailed {
+                            Text("Member since \(memberSinceText(d.memberSince))")
+                                .font(.caption).foregroundStyle(.white.opacity(0.5))
+                        }
+                    }
+                    HStack(spacing: 12) {
+                        Button { Task { await model.openFriends() } } label: {
+                            Text("\(model.friends.count) Friends")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(Color.white.opacity(0.08), in: Capsule())
+                        }
+                        Button { showingEditSheet = true } label: {
+                            Text("Edit Profile")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(Color.white.opacity(0.08), in: Capsule())
+                        }
+                    }
+                }
+                .padding(.horizontal, 24)
+
+                // Quick Stats Row
+                quickStatsRow
                     .padding(.horizontal, 24)
-                StatsSummaryView(stats: model.stats)
+
+                // Mode Breakdown
+                if let d = detailed {
+                    modeBreakdownSection(d)
+                        .padding(.horizontal, 24)
+                }
+
+                // Insights
+                if let d = detailed {
+                    insightsCard(d.insights, stats: d.overall)
+                        .padding(.horizontal, 24)
+                }
+
+                // Series Stats
+                if let d = detailed, d.series.played > 0 {
+                    NativeCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Series").font(.headline.weight(.bold))
+                            HStack {
+                                StatValue(title: "Played", value: "\(d.series.played)")
+                                StatValue(title: "Won", value: "\(d.series.won)")
+                                StatValue(title: "Lost", value: "\(d.series.lost)")
+                                StatValue(title: "Win %", value: "\(d.series.winRate)%")
+                            }
+                        }
+                    }
                     .padding(.horizontal, 24)
+                }
+
+                // Variant Stats
+                if let d = detailed {
+                    variantSection(d)
+                        .padding(.horizontal, 24)
+                }
+
+                // Recent Games
+                recentGamesSection
+                    .padding(.horizontal, 24)
+
                 NativeSecondaryButton(title: "Sign Out") { Task { await model.signOut() } }
                     .padding(.horizontal, 24)
+                    .padding(.bottom, 32)
             }
         }
+        .sheet(isPresented: $showingEditSheet) {
+            EditProfileSheet(model: model)
+        }
+    }
+
+    private var quickStatsRow: some View {
+        HStack(spacing: 12) {
+            QuickStatCard(title: "Win Rate", value: "\(model.stats.winRate)%", accent: "#6366f1")
+            QuickStatCard(title: "Games", value: "\(model.stats.gamesPlayed)", accent: "#06b6d4")
+            QuickStatCard(title: "Streak", value: "\(model.stats.currentWinStreak)", accent: "#22c55e")
+            QuickStatCard(title: "Best", value: "\(model.stats.longestWinStreak)", accent: "#f97316")
+        }
+    }
+
+    @ViewBuilder
+    private func modeBreakdownSection(_ d: DetailedStatsResponse) -> some View {
+        let modes = modeList(d.byMode)
+        if !modes.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Game Modes").font(.headline.weight(.bold))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(modes, id: \.0) { name, breakdown in
+                            ModeCard(name: name, breakdown: breakdown)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func variantSection(_ d: DetailedStatsResponse) -> some View {
+        let hasClassic = d.byVariant.classic != nil
+        let hasKOTB = d.byVariant.kingOfTheBoard != nil
+        if hasClassic || hasKOTB {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Variants").font(.headline.weight(.bold))
+                HStack(spacing: 10) {
+                    if let c = d.byVariant.classic {
+                        ModeCard(name: "Classic", breakdown: c)
+                    }
+                    if let k = d.byVariant.kingOfTheBoard {
+                        ModeCard(name: "King of the Board", breakdown: k)
+                    }
+                }
+            }
+        }
+    }
+
+    private var recentGamesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Recent Games").font(.headline.weight(.bold))
+                Spacer()
+                if model.stats.gamesPlayed > 0 {
+                    Button("View All") { Task { await model.openGameHistory() } }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(hex: "#6366f1"))
+                }
+            }
+            if model.recentGames.isEmpty && model.stats.gamesPlayed == 0 {
+                Text("No games played yet.")
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
+            } else if model.recentGames.isEmpty {
+                Text(model.recentGamesStatusMessage ?? "Recent game history is not available for these matches yet.")
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
+            } else {
+                ForEach(model.recentGames) { game in
+                    GameHistoryRow(game: game)
+                }
+            }
+        }
+    }
+
+    private func modeList(_ modes: ModeBreakdowns) -> [(String, ModeBreakdown)] {
+        var list: [(String, ModeBreakdown)] = []
+        if let m = modes.botEasy { list.append(("Bot Easy", m)) }
+        if let m = modes.botMedium { list.append(("Bot Medium", m)) }
+        if let m = modes.botHard { list.append(("Bot Hard", m)) }
+        if let m = modes.botImpossible { list.append(("Bot Impossible", m)) }
+        if let m = modes.multiplayer { list.append(("Multiplayer", m)) }
+        return list
+    }
+
+    private func memberSinceText(_ timestamp: Double) -> String {
+        let date = Date(timeIntervalSince1970: timestamp / 1000)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM yyyy"
+        return formatter.string(from: date)
+    }
+}
+
+private struct EditProfileSheet: View {
+    @ObservedObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var displayName = ""
+    @State private var avatarID = "bear"
+    @State private var avatarColor = "#6366f1"
+
+    var body: some View {
+        ZStack {
+            Color(hex: "#0a0a1a").ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    sheetHeader(title: "Edit Profile", onClose: { dismiss() })
+                    AvatarPickerView(selectedAvatarID: $avatarID, selectedColor: $avatarColor)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("DISPLAY NAME").font(.caption.weight(.bold)).foregroundStyle(.white.opacity(0.5))
+                        TextField("Display Name", text: $displayName)
+                            .font(.headline)
+                            .padding(14)
+                            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.08)))
+                    }
+                    NativePrimaryButton(title: "Save") {
+                        Task {
+                            await model.updateProfile(displayName: displayName, avatarID: avatarID, avatarColor: avatarColor)
+                            dismiss()
+                        }
+                    }
+                }
+                .padding(24)
+            }
+        }
+        .presentationDetents([.large])
         .onAppear {
             displayName = model.user?.displayName ?? ""
             avatarID = model.user?.avatarId ?? "bear"
@@ -516,34 +842,310 @@ struct ProfileView: View {
     }
 }
 
+private struct QuickStatCard: View {
+    let title: String
+    let value: String
+    let accent: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.title3.monospacedDigit().weight(.black))
+                .foregroundStyle(Color(hex: accent))
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.white.opacity(0.6))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(Color(hex: accent).opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+private struct ModeCard: View {
+    let name: String
+    let breakdown: ModeBreakdown
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(name)
+                .font(.subheadline.weight(.bold))
+                .lineLimit(1)
+            Text("\(breakdown.gamesPlayed) games")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.1))
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(hex: "#22c55e"))
+                        .frame(width: geo.size.width * CGFloat(breakdown.winRate) / 100)
+                }
+            }
+            .frame(height: 6)
+            Text("\(breakdown.winRate)% win rate")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.5))
+        }
+        .padding(12)
+        .frame(width: 140)
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+@MainActor @ViewBuilder
+private func insightsCard(_ insights: StatsInsights, stats: UserStats) -> some View {
+    NativeCard {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Insights").font(.headline.weight(.bold))
+            if let avg = insights.avgGameDurationMs {
+                InsightRow(icon: "clock.fill", title: "Avg Game Duration", value: formatDuration(avg))
+            }
+            if let color = insights.favoriteTeamColor {
+                InsightRow(icon: "paintpalette.fill", title: "Favorite Team", value: color.capitalized)
+            }
+            InsightRow(icon: "suit.spade.fill", title: "Jack Usage", value: "\(Int(insights.jackUsageRate * 100))%")
+            if let fmwr = insights.firstMoveWinRate {
+                InsightRow(icon: "1.circle.fill", title: "First Move Win Rate", value: "\(fmwr)%")
+            }
+            if let avgT = insights.avgTurnsPerGame {
+                InsightRow(icon: "arrow.triangle.2.circlepath", title: "Avg Turns/Game", value: String(format: "%.1f", avgT))
+            }
+            if let avgS = insights.avgSequencesPerGame {
+                InsightRow(icon: "square.stack.3d.up.fill", title: "Avg Sequences/Game", value: String(format: "%.1f", avgS))
+            }
+            InsightRow(icon: "hourglass", title: "Total Play Time", value: insights.totalPlayTimeFormatted)
+            if stats.hasBeatImpossibleBot {
+                InsightRow(icon: "trophy.fill", title: "Impossible Victories", value: "\(stats.impossibleBotWins)")
+            }
+        }
+    }
+}
+
+private struct InsightRow: View {
+    let icon: String
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.5))
+                .frame(width: 20)
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.8))
+            Spacer()
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+        }
+    }
+}
+
+private func formatDuration(_ ms: Int) -> String {
+    let seconds = ms / 1000
+    if seconds < 60 { return "\(seconds)s" }
+    let minutes = seconds / 60
+    let secs = seconds % 60
+    if minutes < 60 { return secs > 0 ? "\(minutes)m \(secs)s" : "\(minutes)m" }
+    let hours = minutes / 60
+    let mins = minutes % 60
+    return mins > 0 ? "\(hours)h \(mins)m" : "\(hours)h"
+}
+
 struct FriendsView: View {
     @ObservedObject var model: AppModel
     @State private var query = ""
+    @State private var selectedTab = 0
+
+    private var requestCount: Int { model.friendRequests.count }
 
     var body: some View {
-        VStack(spacing: 16) {
-            HeaderBar(title: "Friends") { model.screen = .home }
-            TextField("Search by username", text: $query)
-                .textFieldStyle(.roundedBorder)
+        VStack(spacing: 0) {
+            HeaderBar(title: "Friends (\(model.friends.count))") { model.screen = .home }
+                .padding(.bottom, 8)
+
+            // Search bar
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.white.opacity(0.4))
+                TextField("Search username or name", text: $query)
+                    .textInputAutocapitalization(.never)
+                if !query.isEmpty {
+                    Button { query = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 24)
+            .padding(.bottom, 12)
+            .onChange(of: query) { _, newValue in Task { await model.searchProfiles(newValue) } }
+
+            if query.isEmpty {
+                // Segmented control
+                HStack(spacing: 0) {
+                    segmentButton("Friends", tag: 0)
+                    segmentButton("Requests" + (requestCount > 0 ? " (\(requestCount))" : ""), tag: 1)
+                }
                 .padding(.horizontal, 24)
-                .onChange(of: query) { _, newValue in Task { await model.searchProfiles(newValue) } }
+                .padding(.bottom, 8)
+            }
+
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 10) {
                     if !query.isEmpty {
-                        ForEach(model.searchResults.filter { result in !model.friends.contains(where: { $0.userId == result.userId }) }) { friend in
-                            FriendRow(friend: friend, trailing: { Task { await model.sendFriendRequest(username: friend.username) } }, actionTitle: "Add")
+                        // Search results
+                        ForEach(model.searchResults) { result in
+                            searchResultRow(result)
                         }
-                    } else {
-                        ForEach(model.friendRequests) { request in
-                            FriendRow(friend: FriendInfo(userId: request.userId, username: request.username, displayName: request.displayName, avatarId: request.avatarId, avatarColor: request.avatarColor, since: nil, hasBeatImpossibleBot: nil), trailing: { Task { await model.acceptFriendRequest(userID: request.userId) } }, actionTitle: "Accept")
+                        if model.searchResults.isEmpty && query.count >= 2 {
+                            Text("No users found")
+                                .foregroundStyle(.white.opacity(0.5))
+                                .padding(.top, 20)
+                        }
+                    } else if selectedTab == 0 {
+                        // Friends list
+                        if model.friends.isEmpty {
+                            VStack(spacing: 8) {
+                                Text("No friends yet")
+                                    .font(.headline).foregroundStyle(.white.opacity(0.5))
+                                Text("Search for users to add friends")
+                                    .font(.subheadline).foregroundStyle(.white.opacity(0.4))
+                            }
+                            .padding(.top, 40)
                         }
                         ForEach(model.friends) { friend in
-                            FriendRow(friend: friend, trailing: { Task { await model.removeFriend(userID: friend.userId) } }, actionTitle: "Remove")
+                            Button { Task { await model.openFriendProfile(friend) } } label: {
+                                NativeCard {
+                                    HStack(spacing: 12) {
+                                        AvatarBubble(avatarID: friend.avatarId, avatarColor: friend.avatarColor)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            HStack(spacing: 6) {
+                                                Text(friend.displayName).fontWeight(.semibold)
+                                                if friend.hasBeatImpossibleBot == true {
+                                                    Text("💀").font(.caption)
+                                                }
+                                            }
+                                            Text("@\(friend.username)")
+                                                .font(.caption)
+                                                .foregroundStyle(.white.opacity(0.6))
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.white.opacity(0.3))
+                                    }
+                                }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) { Task { await model.removeFriend(userID: friend.userId) } } label: {
+                                    Label("Remove", systemImage: "person.badge.minus")
+                                }
+                            }
+                        }
+                    } else {
+                        // Requests tab
+                        if model.friendRequests.isEmpty {
+                            Text("No pending requests")
+                                .foregroundStyle(.white.opacity(0.5))
+                                .padding(.top, 40)
+                        }
+                        ForEach(model.friendRequests) { request in
+                            NativeCard {
+                                HStack(spacing: 12) {
+                                    AvatarBubble(avatarID: request.avatarId, avatarColor: request.avatarColor)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(request.displayName).fontWeight(.semibold)
+                                        Text("@\(request.username)")
+                                            .font(.caption)
+                                            .foregroundStyle(.white.opacity(0.6))
+                                    }
+                                    Spacer()
+                                    Button { Task { await model.acceptFriendRequest(userID: request.userId) } } label: {
+                                        Text("Accept")
+                                            .font(.caption.weight(.bold))
+                                            .padding(.horizontal, 12).padding(.vertical, 8)
+                                            .background(Color(hex: "#22c55e"), in: Capsule())
+                                    }
+                                    Button { Task { await model.rejectFriendRequest(userID: request.userId) } } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.caption.weight(.bold))
+                                            .padding(8)
+                                            .background(Color.white.opacity(0.1), in: Circle())
+                                    }
+                                }
+                            }
                         }
                     }
                 }
                 .padding(.horizontal, 24)
+                .padding(.bottom, 32)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func searchResultRow(_ result: SearchResult) -> some View {
+        NativeCard {
+            HStack(spacing: 12) {
+                AvatarBubble(avatarID: result.avatarId, avatarColor: result.avatarColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(result.displayName).fontWeight(.semibold)
+                    Text("@\(result.username)")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                Spacer()
+                switch result.friendStatus {
+                case "friend":
+                    Button { Task { await model.openFriendProfileFromSearch(result) } } label: {
+                        Text("Friends")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color(hex: "#22c55e"))
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(Color(hex: "#22c55e").opacity(0.15), in: Capsule())
+                    }
+                case "pending_sent":
+                    Text("Pending")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Color.white.opacity(0.06), in: Capsule())
+                case "pending_received":
+                    Button { Task { await model.acceptFriendRequest(userID: result.id); await model.searchProfiles(query) } } label: {
+                        Text("Accept")
+                            .font(.caption.weight(.bold))
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(Color(hex: "#22c55e"), in: Capsule())
+                    }
+                default:
+                    Button { Task { await model.sendFriendRequest(username: result.username); await model.searchProfiles(query) } } label: {
+                        Text("Add")
+                            .font(.caption.weight(.bold))
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .background(Color(hex: "#6366f1"), in: Capsule())
+                    }
+                }
+            }
+        }
+    }
+
+    private func segmentButton(_ title: String, tag: Int) -> some View {
+        Button {
+            selectedTab = tag
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(selectedTab == tag ? .bold : .medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    selectedTab == tag ? Color(hex: "#6366f1") : Color.white.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
         }
     }
 }
@@ -867,22 +1469,369 @@ struct HeaderBar: View {
     }
 }
 
-private struct FriendRow: View {
-    let friend: FriendInfo
-    let trailing: () -> Void
-    let actionTitle: String
+// MARK: - FriendProfileView
+
+struct FriendProfileView: View {
+    @ObservedObject var model: AppModel
+
+    private var profile: FriendProfileResponse? { model.viewingProfile }
+    private var detailed: DetailedStatsResponse? { model.viewingDetailedStats }
+    private var h2h: HeadToHeadResponse? { model.headToHead }
 
     var body: some View {
-        NativeCard {
-            HStack {
-                AvatarBubble(avatarID: friend.avatarId, avatarColor: friend.avatarColor)
-                VStack(alignment: .leading) {
-                    Text(friend.displayName).fontWeight(.semibold)
-                    Text("@\(friend.username)").foregroundStyle(.white.opacity(0.65))
+        ScrollView {
+            VStack(spacing: 20) {
+                HeaderBar(title: "Profile") { model.screen = .friends }
+
+                if let p = profile {
+                    // Profile Header
+                    VStack(spacing: 10) {
+                        AvatarBubble(avatarID: p.user.avatarId, avatarColor: p.user.avatarColor, size: 72)
+                        Text(p.user.displayName).font(.title2.weight(.bold))
+                        Text("@\(p.user.username)").foregroundStyle(.white.opacity(0.6))
+                        HStack(spacing: 16) {
+                            if let ts = p.user.createdAt {
+                                Text("Member since \(memberSinceText(ts))")
+                                    .font(.caption).foregroundStyle(.white.opacity(0.5))
+                            }
+                            Text("\(p.friendCount) Friends")
+                                .font(.caption).foregroundStyle(.white.opacity(0.5))
+                        }
+                        friendActionButton(status: p.friendStatus, userId: p.user.id, username: p.user.username)
+                    }
+                    .padding(.horizontal, 24)
+
+                    // Head-to-Head
+                    if let h = h2h, h.gamesPlayed > 0 {
+                        headToHeadCard(h, name: p.user.displayName)
+                            .padding(.horizontal, 24)
+                    } else if h2h != nil {
+                        NativeCard {
+                            VStack(spacing: 6) {
+                                Text("You vs \(p.user.displayName)").font(.headline.weight(.bold))
+                                Text("Haven't played together yet")
+                                    .font(.subheadline).foregroundStyle(.white.opacity(0.5))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .padding(.horizontal, 24)
+                    }
+
+                    // Quick Stats
+                    HStack(spacing: 12) {
+                        QuickStatCard(title: "Win Rate", value: "\(p.stats.winRate)%", accent: "#6366f1")
+                        QuickStatCard(title: "Games", value: "\(p.stats.gamesPlayed)", accent: "#06b6d4")
+                        QuickStatCard(title: "Streak", value: "\(p.stats.currentWinStreak)", accent: "#22c55e")
+                        QuickStatCard(title: "Best", value: "\(p.stats.longestWinStreak)", accent: "#f97316")
+                    }
+                    .padding(.horizontal, 24)
+
+                    // Mode Breakdown
+                    if let d = detailed {
+                        let modes = modeList(d.byMode)
+                        if !modes.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Game Modes").font(.headline.weight(.bold))
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 10) {
+                                        ForEach(modes, id: \.0) { name, breakdown in
+                                            ModeCard(name: name, breakdown: breakdown)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 24)
+                        }
+                    }
+
+                    // Recent Games Together
+                    if let h = h2h, !h.recentGames.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Recent Games Together").font(.headline.weight(.bold))
+                            ForEach(h.recentGames) { game in
+                                GameHistoryRow(game: game)
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                    }
+                } else {
+                    ProgressView()
+                        .padding(.top, 40)
                 }
-                Spacer()
-                Button(actionTitle, action: trailing).buttonStyle(.borderedProminent)
             }
+            .padding(.bottom, 32)
+        }
+    }
+
+    @ViewBuilder
+    private func friendActionButton(status: String, userId: String, username: String) -> some View {
+        switch status {
+        case "friend":
+            Button { Task { await model.removeFriend(userID: userId); await model.loadFriendProfile(username: username) } } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark")
+                    Text("Friends")
+                }
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .background(Color(hex: "#22c55e").opacity(0.2), in: Capsule())
+                .foregroundStyle(Color(hex: "#22c55e"))
+            }
+        case "pending_sent":
+            Text("Request Sent")
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .background(Color.white.opacity(0.08), in: Capsule())
+                .foregroundStyle(.white.opacity(0.5))
+        case "pending_received":
+            Button { Task { await model.acceptFriendRequest(userID: userId); await model.loadFriendProfile(username: username) } } label: {
+                Text("Accept Request")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(Color(hex: "#22c55e"), in: Capsule())
+            }
+        default:
+            Button { Task { await model.sendFriendRequest(username: username); await model.loadFriendProfile(username: username) } } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.badge.plus")
+                    Text("Add Friend")
+                }
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .background(Color(hex: "#6366f1"), in: Capsule())
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func headToHeadCard(_ h: HeadToHeadResponse, name: String) -> some View {
+        NativeCard {
+            VStack(spacing: 12) {
+                Text("You vs \(name)").font(.headline.weight(.bold))
+
+                // Win bar
+                GeometryReader { geo in
+                    let total = max(h.myWins + h.theirWins, 1)
+                    let myWidth = geo.size.width * CGFloat(h.myWins) / CGFloat(total)
+                    HStack(spacing: 2) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(hex: "#6366f1"))
+                            .frame(width: max(myWidth, h.myWins > 0 ? 4 : 0))
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(hex: "#ef4444"))
+                            .frame(width: max(geo.size.width - myWidth - 2, h.theirWins > 0 ? 4 : 0))
+                    }
+                }
+                .frame(height: 10)
+
+                Text("\(h.myWins) wins – \(h.theirWins) wins")
+                    .font(.subheadline.weight(.semibold))
+
+                HStack(spacing: 20) {
+                    VStack(spacing: 2) {
+                        Text("Same Team").font(.caption2.weight(.medium)).foregroundStyle(.white.opacity(0.5))
+                        Text("\(h.sameTeamGames) games (\(h.sameTeamWins) W)")
+                            .font(.caption.weight(.semibold))
+                    }
+                    VStack(spacing: 2) {
+                        Text("Opposing").font(.caption2.weight(.medium)).foregroundStyle(.white.opacity(0.5))
+                        Text("\(h.oppositeTeamGames) games (\(h.oppositeTeamMyWins) W)")
+                            .font(.caption.weight(.semibold))
+                    }
+                }
+            }
+        }
+    }
+
+    private func modeList(_ modes: ModeBreakdowns) -> [(String, ModeBreakdown)] {
+        var list: [(String, ModeBreakdown)] = []
+        if let m = modes.botEasy { list.append(("Bot Easy", m)) }
+        if let m = modes.botMedium { list.append(("Bot Medium", m)) }
+        if let m = modes.botHard { list.append(("Bot Hard", m)) }
+        if let m = modes.botImpossible { list.append(("Bot Impossible", m)) }
+        if let m = modes.multiplayer { list.append(("Multiplayer", m)) }
+        return list
+    }
+
+    private func memberSinceText(_ timestamp: Double) -> String {
+        let date = Date(timeIntervalSince1970: timestamp / 1000)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM yyyy"
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - GameHistoryView
+
+struct GameHistoryView: View {
+    @ObservedObject var model: AppModel
+    @State private var modeFilter: String? = nil
+    @State private var difficultyFilter: String? = nil
+    @State private var resultFilter: String? = nil
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HeaderBar(title: "Game History") { model.screen = .profile }
+                .padding(.bottom, 8)
+
+            // Filter chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    FilterChip(title: "All", selected: modeFilter == nil && resultFilter == nil) {
+                        modeFilter = nil; difficultyFilter = nil; resultFilter = nil; reloadHistory()
+                    }
+                    FilterChip(title: "Bot", selected: modeFilter == "bot") {
+                        modeFilter = "bot"; reloadHistory()
+                    }
+                    FilterChip(title: "Multiplayer", selected: modeFilter == "multiplayer") {
+                        modeFilter = "multiplayer"; difficultyFilter = nil; reloadHistory()
+                    }
+
+                    if modeFilter == "bot" {
+                        Divider().frame(height: 20)
+                        ForEach(["easy", "medium", "hard", "impossible"], id: \.self) { diff in
+                            FilterChip(title: diff.capitalized, selected: difficultyFilter == diff) {
+                                difficultyFilter = difficultyFilter == diff ? nil : diff; reloadHistory()
+                            }
+                        }
+                    }
+
+                    Divider().frame(height: 20)
+                    FilterChip(title: "Wins", selected: resultFilter == "wins") {
+                        resultFilter = resultFilter == "wins" ? nil : "wins"; reloadHistory()
+                    }
+                    FilterChip(title: "Losses", selected: resultFilter == "losses") {
+                        resultFilter = resultFilter == "losses" ? nil : "losses"; reloadHistory()
+                    }
+                }
+                .padding(.horizontal, 24)
+            }
+            .padding(.bottom, 12)
+
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(model.gameHistoryList) { game in
+                        GameHistoryRow(game: game)
+                    }
+
+                    if model.gameHistoryHasMore && !model.gameHistoryList.isEmpty {
+                        Button("Load More") {
+                            Task {
+                                await model.loadGameHistory(
+                                    mode: modeFilter,
+                                    difficulty: difficultyFilter,
+                                    result: resultFilter,
+                                    offset: model.gameHistoryList.count
+                                )
+                            }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(hex: "#6366f1"))
+                        .padding(.vertical, 16)
+                    }
+
+                    if model.gameHistoryList.isEmpty {
+                        Text("No games found")
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.top, 40)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
+            }
+        }
+    }
+
+    private func reloadHistory() {
+        Task {
+            await model.loadGameHistory(
+                mode: modeFilter,
+                difficulty: difficultyFilter,
+                result: resultFilter
+            )
+        }
+    }
+}
+
+private struct FilterChip: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(selected ? .bold : .medium))
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(
+                    selected ? Color(hex: "#6366f1") : Color.white.opacity(0.06),
+                    in: Capsule()
+                )
+        }
+    }
+}
+
+private struct GameHistoryRow: View {
+    let game: GameHistorySummary
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // W/L badge
+            Text(game.myWon ? "W" : "L")
+                .font(.caption.weight(.black))
+                .foregroundStyle(game.myWon ? Color(hex: "#22c55e") : Color(hex: "#ef4444"))
+                .frame(width: 28, height: 28)
+                .background(
+                    (game.myWon ? Color(hex: "#22c55e") : Color(hex: "#ef4444")).opacity(0.15),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    if let diff = game.botDifficulty {
+                        Text("vs Bot (\(diff.capitalized))")
+                            .font(.subheadline.weight(.semibold))
+                    } else {
+                        Text("\(game.playerCount) Players")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    if game.gameVariant == "king-of-the-board" {
+                        Text("KOTB")
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color(hex: "#f97316").opacity(0.2), in: Capsule())
+                            .foregroundStyle(Color(hex: "#f97316"))
+                    }
+                }
+                Text("\(gameDate(game.endedAt)) · \(formatDuration(game.durationMs))")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+
+            Spacer()
+
+            // Team color dot
+            Circle()
+                .fill(teamDotColor(game.myTeamColor))
+                .frame(width: 10, height: 10)
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func gameDate(_ timestamp: Double) -> String {
+        let date = Date(timeIntervalSince1970: timestamp / 1000)
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func teamDotColor(_ color: String) -> Color {
+        switch color {
+        case "blue": return Color(hex: "#2980b9")
+        case "green": return Color(hex: "#27ae60")
+        case "red": return Color(hex: "#c0392b")
+        default: return .gray
         }
     }
 }

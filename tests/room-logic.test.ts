@@ -74,4 +74,24 @@ describe('King Of The Board room logic', () => {
 
     expect(modes).toEqual(['king-of-the-board', 'series']);
   });
+
+  it('should attach a missing user id when a player reconnects with an existing token', () => {
+    const host = createReadyPlayer('Host', true);
+    const room = createRoomData('TEST4', 'Test Room', host, 4, 2);
+
+    const player = addPlayerToRoom(room, 'Player 2');
+    if ('error' in player) {
+      throw new Error('Failed to add player for test setup');
+    }
+
+    player.userId = undefined;
+
+    const reconnected = addPlayerToRoom(room, 'Player 2', player.token, 'user-123');
+    if ('error' in reconnected) {
+      throw new Error('Failed to reconnect player for test setup');
+    }
+
+    expect(reconnected.id).toBe(player.id);
+    expect(reconnected.userId).toBe('user-123');
+  });
 });

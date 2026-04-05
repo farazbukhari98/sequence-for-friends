@@ -66,6 +66,10 @@ struct NativeSequenceCelebrationModal: View {
     let celebration: SequenceCelebrationState
     let onDismiss: () -> Void
 
+    private var isKingZoneCelebration: Bool {
+        celebration.usedKingZone && celebration.gameVariant == .kingOfTheBoard
+    }
+
     var body: some View {
         modalOverlay {
             VStack(spacing: 18) {
@@ -73,12 +77,30 @@ struct NativeSequenceCelebrationModal: View {
                     .fill(Color(hex: celebration.teamColor.classicHex))
                     .frame(width: 88, height: 88)
                     .overlay {
-                        Text("★")
-                            .font(.system(size: 36, weight: .black))
+                        if isKingZoneCelebration {
+                            Image(systemName: "crown.fill")
+                                .font(.system(size: 34, weight: .black))
+                                .foregroundStyle(
+                                    LinearGradient(colors: [Color(hex: "#facc15"), Color(hex: "#f59e0b")],
+                                                   startPoint: .top, endPoint: .bottom)
+                                )
+                        } else {
+                            Text("★")
+                                .font(.system(size: 36, weight: .black))
+                        }
+                    }
+                    .shadow(color: isKingZoneCelebration ? Color(hex: "#facc15").opacity(0.6) : .clear, radius: 12)
+                    .overlay {
+                        if isKingZoneCelebration {
+                            Circle()
+                                .stroke(Color(hex: "#facc15").opacity(0.6), lineWidth: 2)
+                                .frame(width: 88, height: 88)
+                        }
                     }
 
-                Text(celebration.usedKingZone && celebration.gameVariant == .kingOfTheBoard ? "KING ZONE!" : "SEQUENCE!")
+                Text(isKingZoneCelebration ? "KING ZONE!" : "SEQUENCE!")
                     .font(.system(size: 30, weight: .black, design: .rounded))
+                    .foregroundStyle(isKingZoneCelebration ? Color(hex: "#facc15") : .white)
 
                 Text("Team \(celebration.teamColor.rawValue.uppercased())")
                     .font(.headline.weight(.bold))
