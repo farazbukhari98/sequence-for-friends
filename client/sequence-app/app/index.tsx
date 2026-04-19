@@ -14,12 +14,12 @@ export default function Index() {
     );
   }
 
-  if (!sessionToken || !user) {
-    return <Redirect href="/(auth)/login" />;
-  }
-
   if (needsUsername) {
     return <Redirect href="/(auth)/onboarding" />;
+  }
+
+  if (!sessionToken || !user) {
+    return <Redirect href="/(auth)/login" />;
   }
 
   return <Redirect href="/(main)/home" />;

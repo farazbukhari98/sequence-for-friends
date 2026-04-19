@@ -48,11 +48,21 @@ class ApiClient {
 
   // Auth
   async authApple(identityToken: string, fullName?: { givenName?: string; familyName?: string }): Promise<AuthAppleResponse> {
-    return this.request<AuthAppleResponse>('/api/auth/apple', 'POST', null, { identityToken, fullName });
+    return this.request<AuthAppleResponse>('/api/auth/apple', 'POST', null, {
+      identityToken,
+      givenName: fullName?.givenName,
+      familyName: fullName?.familyName,
+    });
   }
 
   async authComplete(tempToken: string, username: string, displayName: string, avatarId: string, avatarColor: string): Promise<AuthCompleteResponse> {
-    return this.request<AuthCompleteResponse>('/api/auth/complete', 'POST', tempToken, { username, displayName, avatarId, avatarColor });
+    return this.request<AuthCompleteResponse>('/api/auth/complete', 'POST', null, {
+      tempToken,
+      username,
+      displayName,
+      avatarId,
+      avatarColor,
+    });
   }
 
   async checkUsername(username: string): Promise<UsernameAvailabilityResponse> {

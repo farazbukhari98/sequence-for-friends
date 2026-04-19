@@ -17,7 +17,7 @@ export interface UserProfile {
   displayName: string;
   avatarId: string;
   avatarColor: string;
-  createdAt: number | null;
+  createdAt?: number | null;
 }
 
 export interface AuthAppleResponse {
