@@ -1,0 +1,45 @@
+{
+  "name": "sequence-app",
+  "version": "2.0.0",
+  "description": "Sequence For Friends - Multiplayer card game",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "typescript": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "Faraz Bukhari",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~55.0.15",
+    "expo-apple-authentication": "~55.0.13",
+    "expo-auth-session": "~55.0.14",
+    "expo-constants": "~55.0.14",
+    "expo-crypto": "~55.0.14",
+    "expo-haptics": "~55.0.14",
+    "expo-image": "~55.0.8",
+    "expo-linear-gradient": "~55.0.13",
+    "expo-linking": "~55.0.13",
+    "expo-notifications": "~55.0.19",
+    "expo-router": "~55.0.12",
+    "expo-secure-store": "~55.0.13",
+    "expo-splash-screen": "~55.0.18",
+    "expo-status-bar": "~55.0.5",
+    "immer": "^11.1.4",
+    "react": "19.2.0",
+    "react-native": "0.79.5",
+    "react-native-gesture-handler": "~2.30.0",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "^4.24.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.0",
+    "typescript": "~5.8.3"
+  }
+}

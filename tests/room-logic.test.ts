@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addBotToRoom,
   addPlayerToRoom,
+  continueSeriesInRoom,
   createPlayer,
   createRoomData,
   getActiveModes,
@@ -13,6 +14,26 @@ function createReadyPlayer(name: string, isHost = false) {
   const player = createPlayer(name, isHost);
   player.ready = true;
   return player;
+}
+
+function createReadySeriesRoom(seriesLength: 3 | 5 | 7 = 3) {
+  const host = createReadyPlayer('Host', true);
+  const room = createRoomData('SERIES', 'Series Room', host, 4, 2, 0, 2, 5, seriesLength);
+
+  for (const name of ['Player 2', 'Player 3', 'Player 4']) {
+    const player = addPlayerToRoom(room, name);
+    if ('error' in player) {
+      throw new Error(`Failed to add player ${name} for test setup`);
+    }
+    player.ready = true;
+  }
+
+  const startResult = startGameInRoom(room, host.id);
+  if ('error' in startResult) {
+    throw new Error(`Failed to start series room for test setup: ${startResult.error}`);
+  }
+
+  return { room, host };
 }
 
 describe('King Of The Board room logic', () => {
@@ -93,5 +114,59 @@ describe('King Of The Board room logic', () => {
 
     expect(reconnected.id).toBe(player.id);
     expect(reconnected.userId).toBe('user-123');
+  });
+
+  it('should advance series wins and games played when continuing to the next game', () => {
+    const { room, host } = createReadySeriesRoom(3);
+
+    if (!room.gameState) {
+      throw new Error('Expected game state for test setup');
+    }
+    room.gameState.winnerTeamIndex = 0;
+
+    const result = continueSeriesInRoom(room, host.id);
+
+    expect('error' in result).toBe(false);
+    expect(room.seriesState).toMatchObject({
+      gamesPlayed: 1,
+      teamWins: [1, 0],
+      seriesWinnerTeamIndex: null,
+    });
+    expect(room.gameState?.winnerTeamIndex).toBeNull();
+    expect(room.phase).toBe('in-game');
+  });
+
+  it('should finalize the series when a team reaches the required number of wins', () => {
+    const { room, host } = createReadySeriesRoom(3);
+
+    if (!room.gameState) {
+      throw new Error('Expected game state for test setup');
+    }
+    room.gameState.winnerTeamIndex = 0;
+
+    const firstResult = continueSeriesInRoom(room, host.id);
+    if ('error' in firstResult) {
+      throw new Error(`Expected series to continue after first win: ${firstResult.error}`);
+    }
+
+    if (!room.gameState) {
+      throw new Error('Expected next game state after first series win');
+    }
+    room.gameState.winnerTeamIndex = 0;
+
+    const finalResult = continueSeriesInRoom(room, host.id);
+
+    expect('error' in finalResult).toBe(true);
+    if ('error' in finalResult) {
+      expect(finalResult.error).toBe('Series over');
+    }
+    expect(room.seriesState).toMatchObject({
+      gamesPlayed: 2,
+      teamWins: [2, 0],
+      seriesWinnerTeamIndex: 0,
+    });
+    expect(room.phase).toBe('waiting');
+    expect(room.gameState).toBeNull();
+    expect(room.players.map(player => player.ready)).toEqual([true, false, false, false]);
   });
 });

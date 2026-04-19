@@ -976,6 +976,7 @@ export class RoomDO {
     }
 
     this.sendResponse(ws, msg.id, { success: true });
+    this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
 
     // Re-initialize stats tracking for the new game in the series
     this.gameStartedAt = Date.now();

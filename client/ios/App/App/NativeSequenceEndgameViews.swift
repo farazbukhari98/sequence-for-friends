@@ -276,8 +276,6 @@ struct NativeWinnerModal: View {
                             loading = false
                         }
                     }
-                } else if !isHost {
-                    NativeSecondaryButton(title: "Leave Series", action: onLeave)
                 }
             } else {
                 NativePrimaryButton(title: "Back to Home", action: onLeave)

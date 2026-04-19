@@ -16,7 +16,8 @@
       "Bash(git fetch:*)",
       "Bash(md5:*)",
       "Bash(npm run build:server:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(npm test:*)"
     ]
   }
 }
