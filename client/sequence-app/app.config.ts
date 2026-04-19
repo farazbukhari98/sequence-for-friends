@@ -1,6 +1,6 @@
 import type { ExpoConfig } from 'expo/config';
 
-const config: ExpoConfig = {
+const config = {
   name: 'Sequence',
   slug: 'sequence',
   version: '2.0.0',
@@ -16,7 +16,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.farazbukhari.sequence',
-    buildNumber: '1',
+    buildNumber: '44',
     infoPlist: {
       NSAppTransportSecurity: { NSAllowsArbitraryConnections: true },
     },
@@ -35,6 +35,6 @@ const config: ExpoConfig = {
     'expo-apple-authentication',
   ],
   extra: { router: { origin: false } },
-};
+} satisfies ExpoConfig;
 
 export default config;

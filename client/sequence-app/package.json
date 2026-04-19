@@ -31,15 +31,16 @@
     "expo-splash-screen": "~55.0.18",
     "expo-status-bar": "~55.0.5",
     "immer": "^11.1.4",
-    "react": "19.2.0",
-    "react-native": "0.79.5",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-native": "0.83.4",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-safe-area-context": "~5.6.2",
-    "react-native-screens": "^4.24.0",
+    "react-native-screens": "^4.23.0",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
-    "typescript": "~5.8.3"
+    "typescript": "~5.9.2"
   }
 }
