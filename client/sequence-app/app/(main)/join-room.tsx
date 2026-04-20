@@ -12,9 +12,15 @@ import { colors, spacing, fontSize, fontWeight, radius } from '@/theme';
 export default function JoinRoomScreen() {
   const router = useRouter();
   const { user, sessionToken } = useAuthStore();
-  const { joinRoom, connectionStatus } = useGameStore();
-  const [code, setCode] = useState('');
+  const { joinRoom, pendingRoomCode, setPendingRoomCode } = useGameStore();
+  const [code, setCode] = useState(pendingRoomCode ?? '');
   const [isJoining, setIsJoining] = useState(false);
+
+  React.useEffect(() => {
+    if (pendingRoomCode) {
+      setCode(pendingRoomCode);
+    }
+  }, [pendingRoomCode]);
 
   const handleJoin = async () => {
     if (!sessionToken || !user) return;
@@ -26,6 +32,7 @@ export default function JoinRoomScreen() {
     setIsJoining(true);
     try {
       await joinRoom(trimmed, user.displayName || user.username, sessionToken);
+      setPendingRoomCode(null);
       router.push('/(game)/lobby');
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -40,7 +47,9 @@ export default function JoinRoomScreen() {
       <View style={styles.content}>
         <Card style={styles.card}>
           <Text style={styles.title}>Enter Room Code</Text>
-          <Text style={styles.subtitle}>Ask the room host for the 4-letter code</Text>
+          <Text style={styles.subtitle}>
+            {pendingRoomCode ? `Invite detected for room ${pendingRoomCode}` : 'Ask the room host for the 4-letter code'}
+          </Text>
           <TextInput
             style={styles.codeInput}
             value={code}

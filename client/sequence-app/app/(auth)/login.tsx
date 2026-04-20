@@ -1,13 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { Background, Logo } from '@/components/ui/Background';
 import { Toast } from '@/components/ui/Toast';
 import { colors, spacing, fontSize, fontWeight, radius } from '@/theme';
 
 export default function LoginScreen() {
-  const { signIn, isLoading, errorMessage, clearError } = useAuthStore();
+  const { signIn, isLoading, errorMessage, clearError, sessionToken, user, needsUsername } = useAuthStore();
   const [isAppleAvailable, setIsAppleAvailable] = React.useState(false);
 
   React.useEffect(() => {
@@ -15,6 +16,22 @@ export default function LoginScreen() {
       AppleAuthentication.isAvailableAsync().then(setIsAppleAvailable).catch(() => setIsAppleAvailable(false));
     }
   }, []);
+
+  if (isLoading) {
+    return (
+      <Background style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </Background>
+    );
+  }
+
+  if (needsUsername) {
+    return <Redirect href="/(auth)/onboarding" />;
+  }
+
+  if (sessionToken && user) {
+    return <Redirect href="/(main)/home" />;
+  }
 
   return (
     <Background style={styles.container}>
@@ -62,6 +79,11 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,

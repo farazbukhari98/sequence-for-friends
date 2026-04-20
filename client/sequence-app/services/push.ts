@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from './api';
 import { getSessionToken } from './auth';
@@ -18,6 +19,7 @@ Notifications.setNotificationHandler({
 let pushToken: string | null = null;
 let notificationListener: Notifications.EventSubscription | null = null;
 let responseListener: Notifications.EventSubscription | null = null;
+let linkingSubscription: { remove: () => void } | null = null;
 let onInviteDeepLink: ((roomCode: string) => void) | null = null;
 
 type PermissionResult = { status: string; granted: boolean };
@@ -55,9 +57,13 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   try {
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: 'sequence-game',
-    });
+    const projectId =
+      Constants.easConfig?.projectId ??
+      Constants.expoConfig?.extra?.eas?.projectId;
+
+    const tokenData = projectId
+      ? await Notifications.getExpoPushTokenAsync({ projectId })
+      : await Notifications.getExpoPushTokenAsync();
     pushToken = tokenData.data;
 
     // Register with backend
@@ -93,7 +99,8 @@ export function setupNotificationListeners(
   });
 
   // Handle deep links when app is opened from terminated state
-  Linking.addEventListener('url', (event) => {
+  linkingSubscription?.remove();
+  linkingSubscription = Linking.addEventListener('url', (event) => {
     handleDeepLink(event.url);
   });
 
@@ -119,6 +126,8 @@ function handleDeepLink(url: string) {
 export function cleanupNotificationListeners() {
   notificationListener?.remove();
   responseListener?.remove();
+  linkingSubscription?.remove();
+  linkingSubscription = null;
   onInviteDeepLink = null;
 }
 

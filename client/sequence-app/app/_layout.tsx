@@ -1,13 +1,16 @@
-import { Slot } from 'expo-router';
+import { Slot, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { useAuthStore } from '@/stores/authStore';
+import { useGameStore } from '@/stores/gameStore';
 import { setupNotificationListeners, cleanupNotificationListeners } from '@/services/push';
 import { registerForPushNotifications } from '@/services/push';
 import { Background } from '@/components/ui/Background';
 
 export default function RootLayout() {
+  const router = useRouter();
   const { restoreSession, sessionToken } = useAuthStore();
+  const setPendingRoomCode = useGameStore((state) => state.setPendingRoomCode);
 
   useEffect(() => {
     restoreSession();
@@ -17,12 +20,12 @@ export default function RootLayout() {
     if (sessionToken) {
       registerForPushNotifications();
       setupNotificationListeners((roomCode) => {
-        // Handle deep link invite — could navigate to join room
-        console.log('Invite deep link:', roomCode);
+        setPendingRoomCode(roomCode);
+        router.push('/(main)/join-room');
       });
       return () => cleanupNotificationListeners();
     }
-  }, [sessionToken]);
+  }, [router, sessionToken, setPendingRoomCode]);
 
   return (
     <Background>

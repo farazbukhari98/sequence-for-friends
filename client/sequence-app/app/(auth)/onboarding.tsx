@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { Background } from '@/components/ui/Background';
 import { Button } from '@/components/ui/Button';
@@ -9,12 +10,27 @@ import { Toast } from '@/components/ui/Toast';
 import { colors, spacing, fontSize, fontWeight, radius, AVATAR_EMOJIS, AVATAR_COLORS } from '@/theme';
 
 export default function OnboardingScreen() {
-  const { completeRegistration, isLoading, errorMessage, clearError, suggestedName, checkUsername, usernameAvailability } = useAuthStore();
+  const { completeRegistration, isLoading, errorMessage, clearError, suggestedName, checkUsername, usernameAvailability, needsUsername, tempToken, sessionToken, user } = useAuthStore();
   const [step, setStep] = useState<'username' | 'avatar'>('username');
   const [username, setUsername] = useState(suggestedName ?? '');
   const [displayName, setDisplayName] = useState(suggestedName ?? '');
   const [selectedAvatar, setSelectedAvatar] = useState<string>(AVATAR_EMOJIS[0]);
   const [selectedColor, setSelectedAvatarColor] = useState<string>(AVATAR_COLORS[0]);
+
+  React.useEffect(() => {
+    if (suggestedName) {
+      setUsername((current) => current || suggestedName);
+      setDisplayName((current) => current || suggestedName);
+    }
+  }, [suggestedName]);
+
+  if (sessionToken && user) {
+    return <Redirect href="/(main)/home" />;
+  }
+
+  if (!needsUsername || !tempToken) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   const checkUsernameDebounced = useCallback(
     debounce(async (name: string) => {

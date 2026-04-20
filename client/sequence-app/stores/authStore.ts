@@ -30,7 +30,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   sessionToken: null,
   connectionPhase: 'idle',
   errorMessage: null,
-  isLoading: false,
+  isLoading: true,
   needsUsername: false,
   tempToken: null,
   suggestedName: null,
@@ -97,12 +97,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const session = await restoreSession();
       if (session) {
-        set({ user: session.user, sessionToken: session.token, isLoading: false });
+        set({ user: session.user, sessionToken: session.token, isLoading: false, needsUsername: false, tempToken: null });
       } else {
-        set({ isLoading: false });
+        set({ isLoading: false, needsUsername: false, tempToken: null });
       }
     } catch {
-      set({ isLoading: false });
+      set({ isLoading: false, needsUsername: false, tempToken: null });
     }
   },
 
