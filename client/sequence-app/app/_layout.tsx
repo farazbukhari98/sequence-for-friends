@@ -1,6 +1,7 @@
 import { Slot, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/stores/authStore';
 import { useGameStore } from '@/stores/gameStore';
 import { setupNotificationListeners, cleanupNotificationListeners } from '@/services/push';
@@ -28,9 +29,11 @@ export default function RootLayout() {
   }, [router, sessionToken, setPendingRoomCode]);
 
   return (
-    <Background>
-      <StatusBar style="light" />
-      <Slot />
-    </Background>
+    <SafeAreaProvider>
+      <Background>
+        <StatusBar style="light" />
+        <Slot />
+      </Background>
+    </SafeAreaProvider>
   );
 }

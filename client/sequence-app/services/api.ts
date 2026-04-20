@@ -6,7 +6,7 @@ import type {
 } from '@/types/game';
 import { API_BASE_URL } from '@/constants/api';
 
-class ApiClient {
+export class ApiClient {
   private baseUrl: string;
 
   constructor(baseUrl: string) {

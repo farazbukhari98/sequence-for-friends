@@ -19,7 +19,7 @@ import type { PublicPlayer, BotDifficulty } from '@/types/game';
 export default function LobbyScreen() {
   const router = useRouter();
   const { user, sessionToken } = useAuthStore();
-  const { roomInfo, playerId, connectionStatus, leaveRoom, toggleReady, startGame, updateRoomSettings, addBot, kickPlayer } = useGameStore();
+  const { roomInfo, playerId, gameState, connectionStatus, leaveRoom, toggleReady, startGame, updateRoomSettings, addBot, kickPlayer } = useGameStore();
   const friendsStore = useFriendsStore();
   const [showBotPicker, setShowBotPicker] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
@@ -72,10 +72,10 @@ export default function LobbyScreen() {
 
   // Watch for game starting — transition to game screen
   React.useEffect(() => {
-    if (roomInfo?.phase === 'playing' || roomInfo?.phase === 'cutting') {
+    if (roomInfo?.phase === 'in-game' || roomInfo?.phase === 'cutting' || gameState) {
       router.push('/(game)/game');
     }
-  }, [roomInfo?.phase]);
+  }, [gameState, roomInfo?.phase]);
 
   // Show connection overlay if disconnected
   if (connectionStatus.phase === 'offline' || connectionStatus.phase === 'terminalFailure') {

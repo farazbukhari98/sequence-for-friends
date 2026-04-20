@@ -16,7 +16,7 @@ const config = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.farazbukhari.sequence',
-    buildNumber: '46',
+    buildNumber: '47',
     infoPlist: {
       NSAppTransportSecurity: { NSAllowsArbitraryConnections: true },
       UIBackgroundModes: ['fetch', 'remote-notification'],

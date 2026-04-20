@@ -68,6 +68,12 @@ export default function LoginScreen() {
           )}
         </View>
 
+        <View style={styles.highlightsRow}>
+          <View style={styles.highlightPill}><Text style={styles.highlightText}>Solo bots</Text></View>
+          <View style={styles.highlightPill}><Text style={styles.highlightText}>Live rooms</Text></View>
+          <View style={styles.highlightPill}><Text style={styles.highlightText}>Friends</Text></View>
+        </View>
+
         <Text style={styles.disclaimer}>
           By continuing, you agree to our Terms of Service
         </Text>
@@ -106,11 +112,29 @@ const styles = StyleSheet.create({
   buttonContainer: {
     width: '100%',
     maxWidth: 340,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   appleButton: {
     width: '100%',
     height: 54,
+  },
+  highlightsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  highlightPill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.full,
+    backgroundColor: colors.bgElevated,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  highlightText: {
+    color: colors.textSecondary,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium as any,
   },
   fallbackButton: {
     backgroundColor: colors.primary,
@@ -126,8 +150,10 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold as any,
   },
   disclaimer: {
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     fontSize: fontSize.xs,
     textAlign: 'center',
+    maxWidth: 280,
+    lineHeight: 18,
   },
 });

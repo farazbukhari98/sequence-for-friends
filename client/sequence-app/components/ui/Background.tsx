@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, fontSize, fontWeight } from '@/theme';
 
 interface BackgroundProps {
@@ -10,7 +11,7 @@ interface BackgroundProps {
 
 export function Background({ children, style }: BackgroundProps) {
   return (
-    <View style={[styles.container, style]}>
+    <SafeAreaView style={[styles.container, style]} edges={['top', 'bottom']}>
       <LinearGradient
         colors={[colors.bgGradientStart, colors.bgGradientEnd]}
         style={styles.gradient}
@@ -19,7 +20,7 @@ export function Background({ children, style }: BackgroundProps) {
       />
       <View style={styles.radialGradient} />
       {children}
-    </View>
+    </SafeAreaView>
   );
 }
 

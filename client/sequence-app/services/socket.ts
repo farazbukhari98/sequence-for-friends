@@ -37,7 +37,15 @@ export class SocketManager {
 
     return new Promise((resolve, reject) => {
       try {
-        const url = `${WS_BASE_URL}${path}${this.authToken ? `?token=${encodeURIComponent(this.authToken)}` : ''}`;
+        const normalizedUrl = path.startsWith('ws://') || path.startsWith('wss://')
+          ? new URL(path)
+          : new URL(`${WS_BASE_URL}${path}`);
+
+        if (this.authToken && !normalizedUrl.searchParams.has('auth')) {
+          normalizedUrl.searchParams.set('auth', this.authToken);
+        }
+
+        const url = normalizedUrl.toString();
         const ws = new WebSocket(url);
 
         ws.onopen = () => {
@@ -94,7 +102,7 @@ export class SocketManager {
   request(type: string, data?: any, timeoutMs: number = 10000): Promise<any> {
     return new Promise((resolve, reject) => {
       const id = String(++this.requestIdCounter);
-      const message = { type, ...(data || {}), _requestId: id };
+      const message = { type, id, data: data ?? {} };
 
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
@@ -107,7 +115,7 @@ export class SocketManager {
   }
 
   send(type: string, data?: any) {
-    this.sendRaw({ type, ...(data || {}) });
+    this.sendRaw({ type, id: String(++this.requestIdCounter), data: data ?? {} });
   }
 
   onMessage(handler: MessageHandler) {
@@ -144,23 +152,22 @@ export class SocketManager {
     }
 
     // Handle request responses
-    if (message._responseId) {
-      const pending = this.pendingRequests.get(message._responseId);
+    if (message.type === 'response' && message.id) {
+      const pending = this.pendingRequests.get(message.id);
       if (pending) {
         clearTimeout(pending.timeout);
-        this.pendingRequests.delete(message._responseId);
-        if (message.error) {
-          pending.reject(new Error(message.error));
+        this.pendingRequests.delete(message.id);
+        if (message.data?.success === false || message.data?.error) {
+          pending.reject(new Error(message.data?.error || 'Request failed'));
         } else {
-          pending.resolve(message);
+          pending.resolve(message.data ?? {});
         }
       }
       return;
     }
 
     // Notify message handlers
-    const { type, _requestId, ...data } = message;
-    this.messageHandlers.forEach(handler => handler(type || message.type, data));
+    this.messageHandlers.forEach(handler => handler(message.type, message.data));
 
     // If this is a response to a request (has _requestId matching), that was already handled above
   }

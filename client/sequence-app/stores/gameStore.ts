@@ -1,16 +1,38 @@
 import { create } from 'zustand';
 import { socket } from '@/services/socket';
-import { api } from '@/services/api';
 import type {
-  RoomInfo, ClientGameState, ConnectionPhase, GameAction,
+  RoomInfo, ClientGameState, GameAction,
   CreateRoomPayload, CreateBotGamePayload, UpdateRoomSettingsPayload,
-  RoomSession, PublicPlayer, CutCard, ConnectionStatus,
-  connectionIdle, connectionConnecting, connectionAttached,
+  RoomSession, CutCard, ConnectionStatus,
 } from '@/types/game';
-import { WS_BASE_URL, DEEP_LINK_SCHEME } from '@/constants/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ROOM_SESSION_KEY = 'sequence_room_session';
+
+let removeSocketMessageListener: (() => void) | null = null;
+let removeSocketStatusListener: (() => void) | null = null;
+
+const bindSocketListeners = (
+  setState: (partial: Partial<GameStoreState>) => void,
+  getState: () => GameStoreState,
+) => {
+  removeSocketMessageListener?.();
+  removeSocketStatusListener?.();
+
+  removeSocketMessageListener = socket.onMessage((type, data) => {
+    getState().handleWebSocketMessage(type, data);
+  });
+
+  removeSocketStatusListener = socket.onStatus((status) => {
+    if (status === 'disconnected') {
+      setState({ wsConnected: false, connectionStatus: { phase: 'offline', message: 'Connection lost', attempt: 0, canRetry: true } });
+    } else if (status === 'reconnecting') {
+      setState({ connectionStatus: { phase: 'recovering', message: 'Reconnecting...', attempt: 0, canRetry: false } });
+    } else if (status === 'connected') {
+      setState({ wsConnected: true, connectionStatus: { phase: 'attached', message: null, attempt: 0, canRetry: false } });
+    }
+  });
+};
 
 type CelebrationState = {
   teamIndex: number;
@@ -94,47 +116,60 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   createRoom: async (payload, authToken) => {
     set({ connectionStatus: { phase: 'connecting', message: 'Creating room...', attempt: 0, canRetry: false } });
     try {
-      const result = await api.request<{ success: boolean; roomCode?: string; playerId?: string; token?: string }>('/api/rooms', 'POST', authToken, payload);
+      await get()._connectWebSocket('/ws/create', authToken);
+      const result = await socket.request('create-room', payload) as { success: boolean; roomCode?: string; playerId?: string; token?: string };
       if (result.roomCode && result.playerId && result.token) {
         set({ roomCode: result.roomCode, playerId: result.playerId, roomToken: result.token });
         await get()._saveRoomSession(result.roomCode, result.token, result.playerId);
-        await get()._connectWebSocket(`/ws/room/${result.roomCode}?token=${result.token}`, authToken);
+        socket.setSession({ roomCode: result.roomCode, token: result.token, playerId: result.playerId });
       }
     } catch (error: any) {
+      socket.disconnect();
       set({ connectionStatus: { phase: 'terminalFailure', message: error.message, attempt: 0, canRetry: true } });
+      throw error;
     }
   },
 
   createBotGame: async (payload, authToken) => {
     set({ connectionStatus: { phase: 'connecting', message: 'Starting practice game...', attempt: 0, canRetry: false } });
     try {
-      const result = await api.request<{ success: boolean; roomCode?: string; playerId?: string; token?: string }>('/api/rooms/bot', 'POST', authToken, payload);
+      await get()._connectWebSocket('/ws/create', authToken);
+      const result = await socket.request('create-bot-game', payload) as { success: boolean; roomCode?: string; playerId?: string; token?: string };
       if (result.roomCode && result.playerId && result.token) {
         set({ roomCode: result.roomCode, playerId: result.playerId, roomToken: result.token });
         await get()._saveRoomSession(result.roomCode, result.token, result.playerId);
-        await get()._connectWebSocket(`/ws/room/${result.roomCode}?token=${result.token}`, authToken);
+        socket.setSession({ roomCode: result.roomCode, token: result.token, playerId: result.playerId });
       }
     } catch (error: any) {
+      socket.disconnect();
       set({ connectionStatus: { phase: 'terminalFailure', message: error.message, attempt: 0, canRetry: true } });
+      throw error;
     }
   },
 
   joinRoom: async (code, playerName, authToken) => {
     set({ connectionStatus: { phase: 'connecting', message: 'Joining room...', attempt: 0, canRetry: false } });
     try {
-      const result = await api.request<{ success: boolean; roomInfo?: RoomInfo; playerId?: string; token?: string }>('/api/rooms/join', 'POST', authToken, { roomCode: code, playerName });
+      await get()._connectWebSocket(`/ws/room/${code}`, authToken);
+      const result = await socket.request('join-room', { roomCode: code, playerName }) as { success: boolean; roomInfo?: RoomInfo; playerId?: string; token?: string };
       if (result.roomInfo && result.playerId && result.token) {
         set({ roomInfo: result.roomInfo, roomCode: code, playerId: result.playerId, roomToken: result.token });
         await get()._saveRoomSession(code, result.token, result.playerId);
-        await get()._connectWebSocket(`/ws/room/${code}?token=${result.token}`, authToken);
+        socket.setSession({ roomCode: code, token: result.token, playerId: result.playerId });
       }
     } catch (error: any) {
+      socket.disconnect();
       set({ connectionStatus: { phase: 'terminalFailure', message: error.message, attempt: 0, canRetry: true } });
+      throw error;
     }
   },
 
   leaveRoom: () => {
     socket.disconnect();
+    removeSocketMessageListener?.();
+    removeSocketStatusListener?.();
+    removeSocketMessageListener = null;
+    removeSocketStatusListener = null;
     set({
       roomInfo: null, roomCode: null, playerId: null, roomToken: null,
       gameState: null, selectedCard: null, highlightedCells: new Set(),
@@ -153,10 +188,11 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     }
     set({ connectionStatus: { phase: 'recovering', message: 'Reconnecting...', attempt: 0, canRetry: false } });
     try {
-      const result = await api.request<{ success: boolean; roomInfo?: RoomInfo; gameState?: ClientGameState; playerId?: string; errorCode?: string }>(`/api/rooms/${session.roomCode}/reconnect`, 'POST', authToken, { token: session.token });
+      await get()._connectWebSocket(`/ws/reconnect?token=${encodeURIComponent(session.token)}`, authToken);
+      const result = await socket.request('reconnect-to-room', { roomCode: session.roomCode, token: session.token }) as { success: boolean; roomInfo?: RoomInfo; gameState?: ClientGameState; playerId?: string; errorCode?: string };
       if (result.success && result.roomInfo) {
-        set({ roomInfo: result.roomInfo, roomCode: session.roomCode, playerId: result.playerId, gameState: result.gameState ?? null });
-        await get()._connectWebSocket(`/ws/room/${session.roomCode}?token=${session.token}`, authToken);
+        set({ roomInfo: result.roomInfo, roomCode: session.roomCode, playerId: result.playerId, roomToken: session.token, gameState: result.gameState ?? null });
+        socket.setSession(session);
       } else {
         await get()._clearRoomSession();
         set({ connectionStatus: { phase: 'terminalFailure', message: result.errorCode ?? 'Room not found', attempt: 0, canRetry: false } });
@@ -187,15 +223,15 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   },
 
   updateRoomSettings: (settings: UpdateRoomSettingsPayload) => {
-    socket.send('update-settings', settings);
+    socket.send('update-room-settings', settings);
   },
 
   requestTeamSwitch: (targetTeamIndex: number) => {
-    socket.send('team-switch-request', { targetTeamIndex });
+    socket.send('request-team-switch', { toTeamIndex: targetTeamIndex });
   },
 
   respondToTeamSwitch: (approve: boolean) => {
-    socket.send('team-switch-response', { approve });
+    socket.send('respond-team-switch', { approve });
   },
 
   selectCard: (card: string | null) => {
@@ -212,6 +248,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   clearActiveRoom: () => {
     socket.disconnect();
+    removeSocketMessageListener?.();
+    removeSocketStatusListener?.();
+    removeSocketMessageListener = null;
+    removeSocketStatusListener = null;
     set({
       roomInfo: null, roomCode: null, playerId: null, roomToken: null,
       gameState: null, selectedCard: null, highlightedCells: new Set(),
@@ -225,13 +265,21 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   handleWebSocketMessage: (type: string, data: any) => {
     const state = get();
     switch (type) {
+      case 'room-updated':
       case 'room-state':
       case 'room-info':
         set({ roomInfo: data as RoomInfo });
         break;
 
+      case 'game-started':
+      case 'game-state-updated':
       case 'game-state':
         set({ gameState: data as ClientGameState });
+        break;
+
+      case 'cut-result':
+      case 'cut-cards':
+        set({ cutCards: data?.cutCards ?? data?.cards ?? data ?? null });
         break;
 
       case 'player-joined':
@@ -239,14 +287,23 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       case 'player-ready':
       case 'player-unready':
       case 'room-settings-updated':
-        // These come as room-state updates
         if (data) set({ roomInfo: data as RoomInfo });
+        break;
+
+      case 'game-over':
+        set({
+          winnerInfo: data?.winnerTeamIndex !== undefined
+            ? {
+                teamIndex: data.winnerTeamIndex,
+                teamColor: state.roomInfo?.players.find((player) => player.teamIndex === data.winnerTeamIndex)?.teamColor ?? 'blue',
+              }
+            : null,
+        });
         break;
 
       case 'game-action-result': {
         const result = data as { success: boolean; error?: string; scoring?: any; winnerTeamIndex?: number; gameOver?: boolean };
         if (!result.success && result.error) {
-          // Could show a toast/alert
           console.warn('Game action error:', result.error);
         }
         break;
@@ -262,7 +319,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
             totalScore: data.totalScore ?? 0,
           },
         });
-        // Auto-clear celebration after 3 seconds
         setTimeout(() => set({ celebrationState: null }), 3000);
         break;
 
@@ -270,10 +326,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         set({
           winnerInfo: { teamIndex: data.teamIndex, teamColor: data.teamColor },
         });
-        break;
-
-      case 'cut-cards':
-        set({ cutCards: data.cards ?? data });
         break;
 
       case 'series-update':
@@ -284,20 +336,19 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         }
         break;
 
-      case 'team-switch-request':
-        // Could show modal to player
+      case 'room-closed':
+        set({ connectionStatus: { phase: 'terminalFailure', message: typeof data === 'string' ? data : 'Room closed', attempt: 0, canRetry: false } });
         break;
 
+      case 'team-switch-request':
       case 'team-switch-response':
-        // Handle response
         break;
 
       case 'error':
-        console.error('WebSocket error:', data.message ?? data);
+        console.error('WebSocket error:', data?.message ?? data);
         break;
 
       default:
-        // Unknown message type — ignore
         break;
     }
   },
@@ -321,25 +372,12 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   _connectWebSocket: async (path, authToken) => {
     try {
+      bindSocketListeners(set, get);
       await socket.connect(path, authToken);
       set({ wsConnected: true, connectionStatus: { phase: 'attached', message: null, attempt: 0, canRetry: false } });
-
-      // Subscribe to messages
-      socket.onMessage((type, data) => {
-        get().handleWebSocketMessage(type, data);
-      });
-
-      socket.onStatus((status) => {
-        if (status === 'disconnected') {
-          set({ wsConnected: false, connectionStatus: { phase: 'offline', message: 'Connection lost', attempt: 0, canRetry: true } });
-        } else if (status === 'reconnecting') {
-          set({ connectionStatus: { phase: 'recovering', message: 'Reconnecting...', attempt: 0, canRetry: false } });
-        } else if (status === 'connected') {
-          set({ wsConnected: true, connectionStatus: { phase: 'attached', message: null, attempt: 0, canRetry: false } });
-        }
-      });
     } catch (error: any) {
       set({ connectionStatus: { phase: 'terminalFailure', message: error.message, attempt: 0, canRetry: true } });
+      throw error;
     }
   },
 }));

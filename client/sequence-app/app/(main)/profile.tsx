@@ -14,16 +14,15 @@ import { colors, spacing, fontSize, fontWeight } from '@/theme';
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, sessionToken, signOut } = useAuthStore();
-  const friendsStore = useFriendsStore();
-  const [stats, setStats] = React.useState<any>(null);
+  const { viewingDetailedStats, loadDetailedStats } = useFriendsStore();
 
   useEffect(() => {
     if (sessionToken) {
-      friendsStore.loadDetailedStats(sessionToken).then(() => {
-        setStats(friendsStore.viewingDetailedStats);
-      });
+      loadDetailedStats(sessionToken).catch(() => {});
     }
-  }, [sessionToken]);
+  }, [loadDetailedStats, sessionToken]);
+
+  const stats = viewingDetailedStats;
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
