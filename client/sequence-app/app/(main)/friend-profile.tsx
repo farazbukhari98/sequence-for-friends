@@ -1,8 +1,10 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/authStore';
 import { useFriendsStore } from '@/stores/friendsStore';
+import { useGameStore } from '@/stores/gameStore';
 import { Background } from '@/components/ui/Background';
 import { HeaderBar } from '@/components/ui/HeaderBar';
 import { Card } from '@/components/ui/Card';
@@ -15,6 +17,8 @@ export default function FriendProfileScreen() {
   const router = useRouter();
   const { sessionToken } = useAuthStore();
   const { viewingProfile, viewingDetailedStats, headToHead, loadDetailedStats, loadHeadToHead } = useFriendsStore();
+  const { roomCode } = useGameStore();
+  const inviteFriend = useFriendsStore((state) => state.inviteFriend);
 
   useEffect(() => {
     if (sessionToken && viewingProfile) {
@@ -49,8 +53,18 @@ export default function FriendProfileScreen() {
               <Text style={styles.displayName}>{user.displayName}</Text>
               <Text style={styles.username}>@{user.username}</Text>
               <View style={styles.badges}>
-                {friendStatus === 'friends' && <Text style={styles.friendBadge}>✓ Friends</Text>}
-                {o?.hasBeatImpossibleBot && <Text style={styles.impossibleBadge}>💀 Beat Impossible</Text>}
+                {friendStatus === 'friends' && (
+                  <View style={styles.badgeRow}>
+                    <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                    <Text style={styles.friendBadge}>Friends</Text>
+                  </View>
+                )}
+                {o?.hasBeatImpossibleBot && (
+                  <View style={styles.badgeRow}>
+                    <Ionicons name="skull" size={14} color={colors.purple} />
+                    <Text style={styles.impossibleBadge}>Beat Impossible</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -103,8 +117,14 @@ export default function FriendProfileScreen() {
             <Button
               title="Invite to Game"
               variant="secondary"
-              onPress={() => {
-                // This would be used when we have an active room
+              disabled={!roomCode}
+              onPress={async () => {
+                if (!sessionToken || !roomCode) {
+                  Alert.alert('No Active Room', 'Create or join a room before inviting a friend.');
+                  return;
+                }
+                const success = await inviteFriend(sessionToken, user.id, roomCode);
+                Alert.alert(success ? 'Invite Sent' : 'Invite Failed', success ? `${user.displayName} was invited to room ${roomCode}.` : 'Could not send the invite.');
               }}
             />
           )}
@@ -121,13 +141,14 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.huge },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { color: colors.textSecondary },
+  emptyText: { color: colors.textOnDarkSecondary },
   profileCard: { padding: spacing.lg, marginBottom: spacing.md },
   profileRow: { flexDirection: 'row', alignItems: 'center' },
   profileInfo: { flex: 1, marginLeft: spacing.lg },
   displayName: { color: colors.text, fontSize: fontSize.xl, fontWeight: fontWeight.bold as any },
   username: { color: colors.textSecondary, fontSize: fontSize.base, marginTop: spacing.xs / 2 },
-  badges: { flexDirection: 'row', marginTop: spacing.sm, gap: spacing.sm },
+  badges: { flexDirection: 'row', marginTop: spacing.sm, gap: spacing.md },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   friendBadge: { color: colors.success, fontSize: fontSize.sm, fontWeight: fontWeight.medium as any },
   impossibleBadge: { color: colors.purple, fontSize: fontSize.sm, fontWeight: fontWeight.medium as any },
   miniStats: { flexDirection: 'row', justifyContent: 'space-around', marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider },
@@ -138,5 +159,5 @@ const styles = StyleSheet.create({
   h2hValue: { color: colors.text, fontSize: fontSize.base, fontWeight: fontWeight.semibold as any },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: spacing.sm },
   actions: { marginTop: spacing.xl },
-  viewMoreLink: { color: colors.primary, fontSize: fontSize.base, fontWeight: fontWeight.medium as any, textAlign: 'center', marginTop: spacing.md },
+  viewMoreLink: { color: colors.gold, fontSize: fontSize.base, fontWeight: fontWeight.medium as any, textAlign: 'center', marginTop: spacing.md },
 });

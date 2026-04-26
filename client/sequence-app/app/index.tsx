@@ -1,26 +1,21 @@
 import { Redirect } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '@/stores/authStore';
-import { colors } from '@/theme';
+import { AuthLoadingScreen, getEntryRedirectPath } from '@/lib/authRouting';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function Index() {
-  const { user, sessionToken, isLoading, needsUsername } = useAuthStore();
+  const authState = useAuthStore(useShallow((state) => ({
+    user: state.user,
+    sessionToken: state.sessionToken,
+    isLoading: state.isLoading,
+    needsUsername: state.needsUsername,
+    tempToken: state.tempToken,
+  })));
+  const redirectPath = getEntryRedirectPath(authState);
 
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+  if (!redirectPath) {
+    return <AuthLoadingScreen />;
   }
 
-  if (needsUsername) {
-    return <Redirect href="/(auth)/onboarding" />;
-  }
-
-  if (!sessionToken || !user) {
-    return <Redirect href="/(auth)/login" />;
-  }
-
-  return <Redirect href="/(main)/home" />;
+  return <Redirect href={redirectPath} />;
 }

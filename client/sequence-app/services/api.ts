@@ -1,12 +1,12 @@
 import type {
   AuthAppleResponse, AuthCompleteResponse, ProfileResponse,
-  SuccessResponse, UsernameAvailabilityResponse, SearchProfilesResponse,
+  SuccessResponse, UsernameAvailabilityResponse, SearchProfilesResponse, StatsResponse,
   FriendsResponse, FriendRequestsResponse, FriendProfileResponse,
   DetailedStatsResponse, HeadToHeadResponse, GameHistoryResponse,
 } from '@/types/game';
 import { API_BASE_URL } from '@/constants/api';
 
-export class ApiClient {
+class ApiClient {
   private baseUrl: string;
 
   constructor(baseUrl: string) {
@@ -56,7 +56,7 @@ export class ApiClient {
   }
 
   async authComplete(tempToken: string, username: string, displayName: string, avatarId: string, avatarColor: string): Promise<AuthCompleteResponse> {
-    return this.request<AuthCompleteResponse>('/api/auth/complete', 'POST', null, {
+    return this.request<AuthCompleteResponse>('/api/auth/complete-registration', 'POST', null, {
       tempToken,
       username,
       displayName,
@@ -69,18 +69,26 @@ export class ApiClient {
     return this.request<UsernameAvailabilityResponse>(`/api/auth/check-username?username=${encodeURIComponent(username)}`, 'GET');
   }
 
+  async signOut(token: string): Promise<SuccessResponse> {
+    return this.request<SuccessResponse>('/api/auth/session', 'DELETE', token);
+  }
+
   // Profile
   async getProfile(token: string): Promise<ProfileResponse> {
-    return this.request<ProfileResponse>('/api/profile', 'GET', token);
+    return this.request<ProfileResponse>('/api/profile/me', 'GET', token);
+  }
+
+  async getMyStats(token: string): Promise<StatsResponse> {
+    return this.request<StatsResponse>('/api/stats/me', 'GET', token);
   }
 
   async updateProfile(token: string, data: { displayName?: string; avatarId?: string; avatarColor?: string }): Promise<SuccessResponse> {
-    return this.request<SuccessResponse>('/api/profile', 'PUT', token, data);
+    return this.request<SuccessResponse>('/api/profile/me', 'PATCH', token, data);
   }
 
   // Search
   async searchProfiles(token: string, query: string): Promise<SearchProfilesResponse> {
-    return this.request<SearchProfilesResponse>(`/api/friends/search?query=${encodeURIComponent(query)}`, 'GET', token);
+    return this.request<SearchProfilesResponse>(`/api/profile/search?q=${encodeURIComponent(query)}`, 'GET', token);
   }
 
   // Friends
@@ -97,11 +105,11 @@ export class ApiClient {
   }
 
   async acceptFriendRequest(token: string, userId: string): Promise<SuccessResponse> {
-    return this.request<SuccessResponse>(`/api/friends/accept/${userId}`, 'POST', token);
+    return this.request<SuccessResponse>('/api/friends/accept', 'POST', token, { userId });
   }
 
   async rejectFriendRequest(token: string, userId: string): Promise<SuccessResponse> {
-    return this.request<SuccessResponse>(`/api/friends/reject/${userId}`, 'POST', token);
+    return this.request<SuccessResponse>('/api/friends/reject', 'POST', token, { userId });
   }
 
   async removeFriend(token: string, userId: string): Promise<SuccessResponse> {
@@ -109,7 +117,7 @@ export class ApiClient {
   }
 
   async getFriendProfile(token: string, username: string): Promise<FriendProfileResponse> {
-    return this.request<FriendProfileResponse>(`/api/friends/profile/${username}`, 'GET', token);
+    return this.request<FriendProfileResponse>(`/api/profile/${encodeURIComponent(username)}`, 'GET', token);
   }
 
   // Invite
@@ -119,8 +127,10 @@ export class ApiClient {
 
   // Stats
   async getDetailedStats(token: string, username?: string): Promise<DetailedStatsResponse> {
-    const query = username ? `?username=${encodeURIComponent(username)}` : '';
-    return this.request<DetailedStatsResponse>(`/api/stats/detailed${query}`, 'GET', token);
+    const path = username
+      ? `/api/stats/${encodeURIComponent(username)}/detailed`
+      : '/api/stats/me/detailed';
+    return this.request<DetailedStatsResponse>(path, 'GET', token);
   }
 
   async getHeadToHead(token: string, userId: string): Promise<HeadToHeadResponse> {
@@ -139,12 +149,12 @@ export class ApiClient {
       if (params.result) queryParts.push(`result=${params.result}`);
     }
     const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
-    return this.request<GameHistoryResponse>(`/api/game-history${query}`, 'GET', token);
+    return this.request<GameHistoryResponse>(`/api/stats/me/history${query}`, 'GET', token);
   }
 
   // Push
   async registerPushToken(token: string, pushToken: string): Promise<SuccessResponse> {
-    return this.request<SuccessResponse>('/api/push/register', 'POST', token, { pushToken });
+    return this.request<SuccessResponse>('/api/push/register', 'POST', token, { token: pushToken });
   }
 }
 

@@ -64,6 +64,14 @@ export async function completeRegistration(
 }
 
 export async function signOut(): Promise<void> {
+  const sessionToken = await getSessionToken();
+  if (sessionToken) {
+    try {
+      await api.signOut(sessionToken);
+    } catch {
+      // Local sign-out should still succeed when offline.
+    }
+  }
   await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY);
   await AsyncStorage.removeItem(USER_PROFILE_KEY);
   await AsyncStorage.removeItem(ROOM_SESSION_KEY);

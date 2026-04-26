@@ -85,12 +85,12 @@ export default {
 <div class="container">
   <h1>Sequence for Friends</h1>
   <p>You've been invited to join a game!</p>
-  <a class="btn" id="openApp" href="sequencegame://join/${roomCode}">Open in App</a>
+  <a class="btn" id="openApp" href="sequencegame:///join/${roomCode}">Open in App</a>
   <br>
-  <a class="store-link" href="https://apps.apple.com/app/sequence-for-friends/id6744899989">Don't have the app? Download from the App Store</a>
+  <a class="store-link" href="https://apps.apple.com/app/sequence-play-with-friends/id6759081811">Don't have the app? Download from the App Store</a>
 </div>
 <script>
-  window.location.href = 'sequencegame://join/${roomCode}';
+  window.location.href = 'sequencegame:///join/${roomCode}';
 </script>
 </body></html>`);
     }
@@ -150,7 +150,7 @@ export default {
 <p>If you grant permission, we store your device push notification token to deliver game invites. You can disable push notifications at any time via iOS Settings. Your device token is deleted when you sign out.</p>
 
 <h2>Data Storage &amp; Security</h2>
-<p>All data is stored on <strong>Cloudflare</strong> infrastructure (Workers, D1 database, KV). Data is encrypted in transit (TLS) and at rest. Authentication tokens are signed with HMAC-SHA256 and expire after 30 days.</p>
+<p>All data is stored on <strong>Cloudflare</strong> infrastructure (Workers, D1 database, KV). Data is encrypted in transit (TLS) and at rest. Authentication tokens are signed with HMAC-SHA256 and expire after 7 days.</p>
 
 <h2>Third-Party Services</h2>
 <ul>
@@ -177,7 +177,7 @@ export default {
 
     // Root redirect
     if (path === '/') {
-      return Response.redirect('https://apps.apple.com/app/sequence-for-friends/id6744899989', 302);
+      return Response.redirect('https://apps.apple.com/app/sequence-play-with-friends/id6759081811', 302);
     }
 
     // ========== API ROUTES ==========

@@ -42,6 +42,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const result = await signInWithApple();
       if (result.needsUsername) {
         set({
+          user: null,
+          sessionToken: null,
           needsUsername: true,
           tempToken: result.tempToken!,
           suggestedName: result.suggestedName ?? null,
@@ -53,6 +55,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           sessionToken: result.sessionToken!,
           isLoading: false,
           needsUsername: false,
+          tempToken: null,
+          suggestedName: null,
         });
       }
     } catch (error: any) {
@@ -97,12 +101,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const session = await restoreSession();
       if (session) {
-        set({ user: session.user, sessionToken: session.token, isLoading: false, needsUsername: false, tempToken: null });
+        set({
+          user: session.user,
+          sessionToken: session.token,
+          isLoading: false,
+          needsUsername: false,
+          tempToken: null,
+          suggestedName: null,
+        });
       } else {
-        set({ isLoading: false, needsUsername: false, tempToken: null });
+        set({
+          user: null,
+          sessionToken: null,
+          isLoading: false,
+          needsUsername: false,
+          tempToken: null,
+          suggestedName: null,
+        });
       }
     } catch {
-      set({ isLoading: false, needsUsername: false, tempToken: null });
+      set({
+        user: null,
+        sessionToken: null,
+        isLoading: false,
+        needsUsername: false,
+        tempToken: null,
+        suggestedName: null,
+      });
     }
   },
 

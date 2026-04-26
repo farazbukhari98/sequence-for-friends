@@ -2,6 +2,7 @@
 
 export const API_BASE_URL = 'https://sequence-for-friends.farazbukhari98.workers.dev';
 export const WS_BASE_URL = 'wss://sequence-for-friends.farazbukhari98.workers.dev';
+export const PUBLIC_JOIN_BASE_URL = 'https://sequence-for-friends.farazbukhari98.workers.dev';
 export const DEEP_LINK_SCHEME = 'sequencegame';
 
 // Reconnection settings

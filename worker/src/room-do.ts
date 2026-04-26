@@ -2,7 +2,6 @@ import type { Env } from './index.js';
 
 import type {
   Room,
-  Player,
   GameState,
   TeamSwitchRequest,
 } from '../../shared/types.js';
@@ -14,7 +13,7 @@ import {
   createPlayer,
   createRoomData,
   addPlayerToRoom,
-  removePlayerFromRoom,
+  applyPlayerLeave,
   kickPlayerFromRoom,
   updateRoomSettings,
   startGameInRoom,
@@ -27,12 +26,13 @@ import {
   toRoomInfo,
   toClientGameState,
   getActiveModes,
+  isValidTurnTimeLimit,
 } from './room-logic.js';
 
 import { applyMove, checkStalemate } from './rules/engine.js';
 import { getNextPlayerIndex } from './gameState.js';
 import { decideBotAction, getBotDelay } from './bot.js';
-import { insertGameHistory } from './db/queries.js';
+import { incrementSeriesStats, insertGameHistory } from './db/queries.js';
 import type { DbGameHistory, DbGameParticipant } from './db/queries.js';
 
 // ============================================
@@ -94,6 +94,9 @@ function serializeRoom(room: Room): SerializedRoom {
 function deserializeRoom(data: SerializedRoom): Room {
   const room = data.room;
   room.gameVariant ||= DEFAULT_GAME_VARIANT;
+  if (room.seriesState && !room.seriesState.seriesId) {
+    room.seriesState.seriesId = crypto.randomUUID();
+  }
 
   if (room.gameState) {
     room.gameState.config.gameVariant ||= room.gameVariant;
@@ -395,7 +398,7 @@ export class RoomDO {
       case 'create-bot-game': return this.handleCreateBotGame(ws, msg);
       case 'join-room': return this.handleJoinRoom(ws, msg);
       case 'reconnect-to-room': return this.handleReconnect(ws, msg);
-      case 'leave-room': return this.handleLeaveRoom(ws);
+      case 'leave-room': return this.handleLeaveRoom(ws, msg);
       case 'start-game': return this.handleStartGame(ws, msg);
       case 'game-action': return this.handleGameAction(ws, msg);
       case 'kick-player': return this.handleKickPlayer(ws, msg);
@@ -409,6 +412,7 @@ export class RoomDO {
       case 'remove-bot': return this.handleRemoveBot(ws, msg);
       case 'send-emote': return this.handleSendEmote(ws, msg);
       case 'send-quick-message': return this.handleSendQuickMessage(ws, msg);
+      case 'ping': return this.handlePing(ws);
     }
   }
 
@@ -416,6 +420,12 @@ export class RoomDO {
 
   private async handleCreateRoom(ws: WebSocket, msg: ClientMessage & { type: 'create-room' }): Promise<void> {
     const { roomName, playerName, maxPlayers, teamCount, turnTimeLimit, sequencesToWin, sequenceLength, seriesLength } = msg.data;
+    const effectiveTurnTimeLimit = turnTimeLimit ?? 0;
+
+    if (!isValidTurnTimeLimit(effectiveTurnTimeLimit)) {
+      this.sendResponse(ws, msg.id, { success: false, error: 'Invalid turn timer' });
+      return;
+    }
 
     // Get room code and userId from tags
     const tags = this.state.getTags(ws);
@@ -425,7 +435,7 @@ export class RoomDO {
     const host = createPlayer(playerName, true, userId);
     this.room = createRoomData(
       roomCode, roomName, host, maxPlayers, teamCount,
-      turnTimeLimit ?? 0, sequencesToWin, sequenceLength, seriesLength
+      effectiveTurnTimeLimit, sequencesToWin, sequenceLength, seriesLength
     );
 
     this.wsToPlayer.set(ws, host.id);
@@ -657,28 +667,46 @@ export class RoomDO {
     this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
   }
 
-  private async handleLeaveRoom(ws: WebSocket): Promise<void> {
+  private async handleLeaveRoom(ws: WebSocket, msg?: ClientMessage & { type: 'leave-room' }): Promise<void> {
     const playerId = this.wsToPlayer.get(ws);
     if (!playerId || !this.room) return;
 
     const isHost = this.room.hostId === playerId;
     const isInGame = this.room.phase === 'in-game';
+    const intent = msg?.data?.intent ?? (isHost && isInGame ? 'end' : 'leave');
 
-    if (isHost && isInGame) {
+    const wasCurrentPlayer = isInGame &&
+      this.room.gameState?.players[this.room.gameState.currentPlayerIndex]?.id === playerId;
+
+    const leaveResult = applyPlayerLeave(this.room, playerId, intent);
+    if (!leaveResult.playerFound) {
+      this.wsToPlayer.delete(ws);
+      this.playerToWs.delete(playerId);
+      return;
+    }
+
+    if (leaveResult.shouldCloseRoom) {
       await this.clearAllTimers();
-      this.broadcast({ type: 'room-closed', data: 'Host ended the game' });
+      this.broadcast({ type: 'room-closed', data: isHost && intent === 'end' ? 'Host ended the game' : 'Host left the game' });
       this.closeAllConnections();
       await this.destroyRoom();
       return;
     }
 
-    removePlayerFromRoom(this.room, playerId);
     this.wsToPlayer.delete(ws);
     this.playerToWs.delete(playerId);
 
     if (this.room.players.length === 0) {
       await this.destroyRoom();
       return;
+    }
+
+    if (wasCurrentPlayer && this.room.gameState?.phase === 'playing') {
+      await this.clearTimer('turn-timeout');
+      const hasConnectedHuman = this.room.players.some(p => p.connected && !p.isBot);
+      if (hasConnectedHuman) {
+        await this.scheduleTimer('disconnect-skip', DISCONNECT_SKIP_MS);
+      }
     }
 
     this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
@@ -966,16 +994,22 @@ export class RoomDO {
     const result = continueSeriesInRoom(this.room, playerId);
 
     if ('error' in result) {
-      if (result.error === 'Series over') {
-        this.sendResponse(ws, msg.id, { success: true });
-        this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
-        return;
-      }
       this.sendResponse(ws, msg.id, { success: false, error: result.error });
       return;
     }
 
-    this.sendResponse(ws, msg.id, { success: true });
+    if ('seriesComplete' in result) {
+      await this.persistSeriesAggregateStats();
+      this.sendResponse(ws, msg.id, {
+        success: true,
+        seriesComplete: true,
+        roomInfo: toRoomInfo(this.room),
+      });
+      this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
+      return;
+    }
+
+    this.sendResponse(ws, msg.id, { success: true, seriesComplete: false, roomInfo: toRoomInfo(this.room) });
     this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
 
     // Re-initialize stats tracking for the new game in the series
@@ -1020,6 +1054,7 @@ export class RoomDO {
 
     this.sendResponse(ws, msg.id, { success: true });
     await this.clearAllTimers();
+    await this.persistSeriesAggregateStats();
     this.broadcast({ type: 'room-updated', data: toRoomInfo(this.room) });
   }
 
@@ -1091,6 +1126,10 @@ export class RoomDO {
       type: 'quick-message-received',
       data: { playerId, playerName: player.name, message: msg.data.message },
     });
+  }
+
+  private handlePing(ws: WebSocket): void {
+    this.sendTo(ws, { type: 'pong' });
   }
 
   // ========== TURN TIMER ==========
@@ -1369,7 +1408,7 @@ export class RoomDO {
       sequence_length: gs.config.sequenceLength,
       sequences_to_win: gs.config.sequencesToWin,
       is_series_game: this.room.seriesState ? 1 : 0,
-      series_id: null,
+      series_id: this.room.seriesState?.seriesId ?? null,
       bot_difficulty: botPlayer?.botDifficulty || null,
     };
 
@@ -1451,6 +1490,51 @@ export class RoomDO {
         }
       }
     }
+  }
+
+  private async persistSeriesAggregateStats(): Promise<void> {
+    if (!this.room?.seriesState || this.room.seriesState.seriesWinnerTeamIndex === null) {
+      return;
+    }
+
+    if (this.room.seriesState.seriesStatsPersisted) {
+      return;
+    }
+
+    if (!this.env.DB) {
+      this.room.seriesState.seriesStatsPersisted = true;
+      return;
+    }
+
+    const winnerTeamIndex = this.room.seriesState.seriesWinnerTeamIndex;
+
+    for (const player of this.room.players) {
+      if (player.isBot || player.userId) continue;
+      const ws = this.playerToWs.get(player.id);
+      if (ws) {
+        try {
+          const tagUserId = this.state.getTags(ws)[4] || undefined;
+          if (tagUserId) {
+            player.userId = tagUserId;
+          }
+        } catch {
+          // WebSocket may be closed while finalizing the series.
+        }
+      }
+    }
+
+    const results = this.room.players
+      .filter(player => !player.isBot && !!player.userId)
+      .map(player => ({
+        user_id: player.userId!,
+        won: player.teamIndex === winnerTeamIndex ? 1 : 0,
+      }));
+
+    if (results.length > 0) {
+      await incrementSeriesStats(this.env.DB, results);
+    }
+
+    this.room.seriesState.seriesStatsPersisted = true;
   }
 
   // ========== MESSAGING HELPERS ==========

@@ -1,10 +1,32 @@
 # Set by expo-router. This enables Fabric-only features from react-native-screens
-ENV['RNS_GAMMA_ENABLED'] ||= '1'
+# Disabled for Xcode 26 compatibility - Gamma features have codegen issues
+ENV['RNS_GAMMA_ENABLED'] ||= '0'
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
 require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
 
 require 'json'
+require 'fileutils'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
+
+def ensure_expo_nested_dependency_path!(dependency_path)
+  expo_package_dir = File.expand_path(File.dirname(`node --print "require.resolve('expo/package.json')"`).strip)
+  nested_dependency_path = File.join(expo_package_dir, 'node_modules', dependency_path)
+  root_dependency_path = File.expand_path(File.join('../node_modules', dependency_path), __dir__)
+
+  return unless File.exist?(root_dependency_path)
+  return if File.exist?(nested_dependency_path)
+
+  FileUtils.mkdir_p(File.dirname(nested_dependency_path))
+  FileUtils.ln_sf(root_dependency_path, nested_dependency_path)
+  puts "[Fix] Linked #{dependency_path} into expo/node_modules for CocoaPods path stability"
+end
+
+%w[
+  expo-modules-core
+  @expo/log-box
+].each do |dependency_path|
+  ensure_expo_nested_dependency_path!(dependency_path)
+end
 
 def ccache_enabled?(podfile_properties)
   # Environment variable takes precedence
@@ -21,6 +43,9 @@ ENV['RCT_HERMES_V1_ENABLED'] ||= '1' if podfile_properties['expo.useHermesV1'] =
 platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
+
+# Enable modular headers for Swift pod compatibility
+use_modular_headers!
 
 target 'Sequence' do
   use_expo_modules!
@@ -61,5 +86,101 @@ target 'Sequence' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    # Xcode 26.x enables Swift explicit modules, which breaks React Native's
+    # prebuilt iOS artifacts during Swift dependency scanning.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_config|
+        build_config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'
+      end
+    end
+
+    installer.aggregate_targets
+      .map(&:user_project)
+      .uniq
+      .each do |user_project|
+        user_project.native_targets.each do |target|
+          next unless target.name == 'Sequence'
+
+          target.build_configurations.each do |build_config|
+            build_config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'
+          end
+        end
+
+        user_project.save
+      end
+
+    # Fix duplicate modulemap issues for Xcode 26 compatibility
+    # React Native 0.79 has multiple pods sharing header directories with conflicting module names
+
+    # Fix 1: react_runtime directory has React-jsitooling and React-RuntimeCore both defining modules
+    jsitooling_modulemap = File.join(installer.sandbox.root, 'Target Support Files/React-jsitooling/React-jsitooling.modulemap')
+    if File.exist?(jsitooling_modulemap)
+      new_content = <<~MODULEMAP
+        module react_jsitooling {
+          header "React-jsitooling-umbrella.h"
+          export *
+        }
+      MODULEMAP
+      File.write(jsitooling_modulemap, new_content)
+      puts "[Fix] Rewrote React-jsitooling.modulemap to avoid umbrella conflict"
+    end
+
+    # Fix 2: ReactCommon directory has React-RuntimeApple and ReactCommon both defining ReactCommon module
+    runtime_apple_modulemap = File.join(installer.sandbox.root, 'Target Support Files/React-RuntimeApple/React-RuntimeApple.modulemap')
+    if File.exist?(runtime_apple_modulemap)
+      new_content = <<~MODULEMAP
+        module react_RuntimeApple {
+          header "React-RuntimeApple-umbrella.h"
+          export *
+        }
+      MODULEMAP
+      File.write(runtime_apple_modulemap, new_content)
+      puts "[Fix] Rewrote React-RuntimeApple.modulemap to avoid ReactCommon redefinition"
+    end
+
+    exconstants_target = installer.pods_project.targets.find { |target| target.name == 'EXConstants' }
+    if exconstants_target
+      exconstants_target.shell_script_build_phases.each do |phase|
+        next unless phase.name == '[CP-User] Generate app.config for prebuilt Constants.manifest'
+
+        # Expo's generated script uses `basename $PROJECT_DIR`, which silently
+        # no-ops when the workspace path contains spaces. Inline a path-safe
+        # variant so the embedded app.config is always generated for release
+        # builds and expo-linking can resolve the app scheme at runtime.
+        phase.shell_script = <<~'SCRIPT'
+          set -eo pipefail
+
+          DEST="$CONFIGURATION_BUILD_DIR"
+          RESOURCE_BUNDLE_NAME="EXConstants.bundle"
+          EXPO_CONSTANTS_PACKAGE_DIR="$(cd "$PODS_TARGET_SRCROOT/.." && pwd -P)"
+
+          PROJECT_DIR_BASENAME="$(basename "$PROJECT_DIR")"
+          if [ "x$PROJECT_DIR_BASENAME" != "xPods" ]; then
+            exit 0
+          fi
+
+          PROJECT_ROOT="${PROJECT_ROOT:-"$PROJECT_DIR/../.."}"
+          PROJECT_ROOT="${PROJECT_ROOT:-"$EXPO_CONSTANTS_PACKAGE_DIR/../.."}"
+
+          cd "$PROJECT_ROOT" || exit 1
+
+          if [ "$BUNDLE_FORMAT" = "shallow" ]; then
+            RESOURCE_DEST="$DEST/$RESOURCE_BUNDLE_NAME"
+          elif [ "$BUNDLE_FORMAT" = "deep" ]; then
+            RESOURCE_DEST="$DEST/$RESOURCE_BUNDLE_NAME/Contents/Resources"
+          else
+            echo "Unsupported bundle format: $BUNDLE_FORMAT"
+            exit 1
+          fi
+
+          mkdir -p "$RESOURCE_DEST"
+          "$EXPO_CONSTANTS_PACKAGE_DIR/scripts/with-node.sh" "$EXPO_CONSTANTS_PACKAGE_DIR/scripts/getAppConfig.js" "$PROJECT_ROOT" "$RESOURCE_DEST"
+        SCRIPT
+        puts "[Fix] Rewrote EXConstants app.config script phase to be path-safe"
+      end
+    end
+
+    installer.pods_project.save
   end
 end

@@ -16,36 +16,60 @@ import { sendPushNotification } from './apns.js';
 // HELPERS
 // ============================================
 
-// Valid avatar IDs and colors — must match the native iOS avatar picker
+// Valid avatar IDs and colors — accepts the Expo card-theme picker and legacy native IDs.
 const VALID_AVATAR_IDS = new Set([
   'bear', 'fox', 'cat', 'dog', 'owl', 'unicorn', 'dragon', 'octopus',
   'penguin', 'koala', 'lion', 'wolf', 'eagle', 'rabbit', 'panda', 'alien',
+  'spade', 'heart', 'diamond', 'club', 'crown', 'ace', 'chip', 'dice',
+  'joker', 'king', 'queen', 'jack', 'star', 'shield', 'sword', 'gem',
 ]);
 const VALID_AVATAR_COLORS = new Set([
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
   '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
+  '#0052A3', '#008000', '#CC0000', '#8B5A2B', '#D4AF37',
+]);
+const ALLOWED_ORIGINS = new Set([
+  'https://sequence.wf',
+  'https://www.sequence.wf',
+  'http://localhost:8081',
+  'http://localhost:8082',
+  'http://localhost:8083',
 ]);
 
-function json(data: unknown, status = 200): Response {
+function getCorsOrigin(request?: Request): string {
+  const origin = request?.headers.get('Origin');
+  if (!origin) return 'https://sequence.wf';
+  return ALLOWED_ORIGINS.has(origin) ? origin : 'https://sequence.wf';
+}
+
+function json(data: unknown, status = 200, request?: Request): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getCorsOrigin(request),
+      'Vary': 'Origin',
     },
   });
 }
 
-function corsHeaders(): Response {
+function corsHeaders(request?: Request): Response {
   return new Response(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': getCorsOrigin(request),
       'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
+      'Vary': 'Origin',
     },
   });
+}
+
+function withCors(response: Response, request: Request): Response {
+  response.headers.set('Access-Control-Allow-Origin', getCorsOrigin(request));
+  response.headers.set('Vary', 'Origin');
+  return response;
 }
 
 // Pending registrations are stored in KV (PLAYER_TOKENS namespace with "reg:" prefix)
@@ -70,10 +94,18 @@ async function checkRateLimit(env: Env, key: string, maxRequests: number, window
 export async function handleApiRequest(request: Request, env: Env, path: string): Promise<Response> {
   // Handle CORS preflight
   if (request.method === 'OPTIONS') {
-    return corsHeaders();
+    return corsHeaders(request);
   }
 
   try {
+    return withCors(await handleApiRoute(request, env, path), request);
+  } catch (err) {
+    console.error('API error:', err);
+    return withCors(json({ error: 'Internal server error' }, 500), request);
+  }
+}
+
+async function handleApiRoute(request: Request, env: Env, path: string): Promise<Response> {
     // ========== AUTH ==========
     if (path === '/api/auth/apple' && request.method === 'POST') {
       return handleAppleAuth(request, env);
@@ -159,10 +191,6 @@ export async function handleApiRequest(request: Request, env: Env, path: string)
     }
 
     return json({ error: 'Not found' }, 404);
-  } catch (err) {
-    console.error('API error:', err);
-    return json({ error: 'Internal server error' }, 500);
-  }
 }
 
 // ============================================

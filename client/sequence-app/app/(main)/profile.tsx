@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/authStore';
 import { useFriendsStore } from '@/stores/friendsStore';
 import { Background } from '@/components/ui/Background';
@@ -63,14 +64,20 @@ export default function ProfileScreen() {
         {/* Detailed Stats */}
         <TouchableOpacity onPress={() => router.push('/(main)/detailed-stats')}>
           <Card style={styles.linkCard}>
-            <Text style={styles.linkTitle}>📊 Detailed Stats</Text>
+            <View style={styles.linkContent}>
+              <Ionicons name="bar-chart-outline" size={20} color={colors.primary} style={styles.linkIcon} />
+              <Text style={styles.linkTitle}>Detailed Stats</Text>
+            </View>
             <Text style={styles.linkChevron}>›</Text>
           </Card>
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => router.push('/(main)/game-history')}>
           <Card style={styles.linkCard}>
-            <Text style={styles.linkTitle}>📋 Game History</Text>
+            <View style={styles.linkContent}>
+              <Ionicons name="time-outline" size={20} color={colors.gold} style={styles.linkIcon} />
+              <Text style={styles.linkTitle}>Game History</Text>
+            </View>
             <Text style={styles.linkChevron}>›</Text>
           </Card>
         </TouchableOpacity>
@@ -93,6 +100,8 @@ const styles = StyleSheet.create({
   statsCard: { padding: spacing.lg, marginBottom: spacing.md },
   sectionTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.semibold as any, marginBottom: spacing.md },
   linkCard: { padding: spacing.lg, marginBottom: spacing.sm, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  linkContent: { flexDirection: 'row', alignItems: 'center' },
+  linkIcon: { marginRight: spacing.md },
   linkTitle: { color: colors.text, fontSize: fontSize.base, fontWeight: fontWeight.medium as any },
   linkChevron: { color: colors.textTertiary, fontSize: 24 },
   signOutButton: { marginTop: spacing.xl },

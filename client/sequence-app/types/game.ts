@@ -7,9 +7,43 @@ export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'T' | 'J' | '
 export type CardCode = `${Rank}${Suit}`;
 export type BoardCell = CardCode | 'W';
 export type TeamColor = 'blue' | 'green' | 'red';
-export type GameVariant = 'classic';
+export type GameVariant = 'classic' | 'king-of-the-board';
 export type BotDifficulty = 'easy' | 'medium' | 'hard' | 'impossible';
+export type GamePhase = 'lobby' | 'cutting' | 'playing' | 'finished';
+export type SequencesToWin = 1 | 2 | 3 | 4;
+export type SequenceLength = 4 | 5;
+export type SeriesLength = 0 | 3 | 5 | 7;
+export type TurnTimeLimit = 0 | 15 | 20 | 30 | 45 | 60 | 90 | 120;
 export type ConnectionPhase = 'idle' | 'connecting' | 'attached' | 'recovering' | 'offline' | 'terminalFailure';
+export type EmoteType = 'thumbs-up' | 'clap' | 'fire' | 'thinking' | 'laugh' | 'cry' | 'angry' | 'heart';
+export type QuickMessageType = 'good-game' | 'nice-move' | 'oops' | 'hurry-up' | 'well-played' | 'rematch';
+
+export const TURN_TIME_OPTIONS: { value: TurnTimeLimit; label: string }[] = [
+  { value: 0, label: 'None' },
+  { value: 15, label: '15s' },
+  { value: 20, label: '20s' },
+  { value: 30, label: '30s' },
+  { value: 45, label: '45s' },
+  { value: 60, label: '60s' },
+  { value: 90, label: '90s' },
+  { value: 120, label: '2min' },
+];
+
+export const SEQUENCE_LENGTH_OPTIONS: { value: SequenceLength; label: string; shortLabel: string }[] = [
+  { value: 5, label: 'Standard', shortLabel: '5 chips' },
+  { value: 4, label: 'Blitz', shortLabel: '4 chips' },
+];
+
+export const SERIES_LENGTH_OPTIONS: { value: SeriesLength; label: string; shortLabel: string }[] = [
+  { value: 0, label: 'Single Game', shortLabel: 'Single' },
+  { value: 3, label: 'Best of 3', shortLabel: 'Bo3' },
+  { value: 5, label: 'Best of 5', shortLabel: 'Bo5' },
+  { value: 7, label: 'Best of 7', shortLabel: 'Bo7' },
+];
+
+export function isTurnTimeLimit(value: unknown): value is TurnTimeLimit {
+  return TURN_TIME_OPTIONS.some(option => option.value === value);
+}
 
 export interface UserProfile {
   id: string;
@@ -35,6 +69,10 @@ export interface AuthCompleteResponse {
 
 export interface ProfileResponse {
   user: UserProfile;
+  stats: UserStats;
+}
+
+export interface StatsResponse {
   stats: UserStats;
 }
 
@@ -146,10 +184,25 @@ export interface PublicPlayer {
 }
 
 export interface SeriesState {
-  seriesLength: number;
+  seriesLength: SeriesLength;
+  seriesId?: string;
   gamesPlayed: number;
   teamWins: number[];
   seriesWinnerTeamIndex: number | null;
+  seriesStatsPersisted?: boolean;
+}
+
+export interface TeamSwitchRequest {
+  playerId: string;
+  playerName: string;
+  fromTeamIndex: number;
+  toTeamIndex: number;
+}
+
+export interface RealtimeNotice {
+  id: number;
+  message: string;
+  type: 'success' | 'warning' | 'error';
 }
 
 export interface RoomInfo {
@@ -161,10 +214,10 @@ export interface RoomInfo {
   maxPlayers: number;
   teamCount: number;
   gameVariant: GameVariant;
-  turnTimeLimit: number;
+  turnTimeLimit: TurnTimeLimit;
   sequencesToWin: number;
-  sequenceLength: number;
-  seriesLength: number;
+  sequenceLength: SequenceLength;
+  seriesLength: SeriesLength;
   seriesState: SeriesState | null;
 }
 
@@ -175,7 +228,7 @@ export interface GameConfig {
   gameVariant: GameVariant;
   sequencesToWin: number;
   scoreToWin: number;
-  sequenceLength: number;
+  sequenceLength: SequenceLength;
   handSize: number;
 }
 
@@ -223,7 +276,7 @@ export interface CutCard {
 }
 
 export interface ClientGameState {
-  phase: string;
+  phase: GamePhase;
   config: GameConfig;
   players: PublicPlayer[];
   dealerIndex: number;
@@ -234,41 +287,41 @@ export interface ClientGameState {
   sequencesCompleted: number[];
   teamScores: number[];
   completedSequences: SequenceLine[];
-  myHand: string[];
+  myHand: CardCode[];
   myPlayerId: string;
   deadCardReplacedThisTurn: boolean;
   pendingDraw: boolean;
-  lastRemovedCell: number[] | null;
+  lastRemovedCell: [number, number] | null;
   winnerTeamIndex: number | null;
   lastMove: MoveResult | null;
   cutCards: CutCard[] | null;
-  turnTimeLimit: number;
+  turnTimeLimit: TurnTimeLimit;
   turnStartedAt: number | null;
   eventLog: GameEvent[];
 }
 
-export interface GameAction {
-  type: string;
-  card?: string;
-  targetRow?: number;
-  targetCol?: number;
-}
+export type GameAction =
+  | { type: 'play-normal' | 'play-two-eyed' | 'play-one-eyed'; card: CardCode; targetRow: number; targetCol: number }
+  | { type: 'replace-dead'; card: CardCode }
+  | { type: 'draw' };
 
 export interface CreateRoomPayload {
   roomName: string;
   playerName: string;
   maxPlayers: number;
   teamCount: number;
-  turnTimeLimit: number;
+  turnTimeLimit: TurnTimeLimit;
   sequencesToWin: number;
+  sequenceLength: SequenceLength;
+  seriesLength: SeriesLength;
 }
 
 export interface CreateBotGamePayload {
   playerName: string;
-  difficulty: string;
-  sequenceLength: number;
-  sequencesToWin: number;
-  seriesLength: number;
+  difficulty: BotDifficulty;
+  sequenceLength: SequenceLength;
+  sequencesToWin: SequencesToWin;
+  seriesLength: SeriesLength;
 }
 
 export interface JoinRoomPayload {
@@ -278,10 +331,10 @@ export interface JoinRoomPayload {
 }
 
 export interface UpdateRoomSettingsPayload {
-  turnTimeLimit?: number;
-  sequencesToWin?: number;
-  sequenceLength?: number;
-  seriesLength?: number;
+  turnTimeLimit?: TurnTimeLimit;
+  sequencesToWin?: SequencesToWin;
+  sequenceLength?: SequenceLength;
+  seriesLength?: SeriesLength;
   gameVariant?: GameVariant;
 }
 

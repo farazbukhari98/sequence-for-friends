@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/authStore';
 import { useFriendsStore } from '@/stores/friendsStore';
 import { Background } from '@/components/ui/Background';
@@ -55,7 +56,7 @@ export default function GameHistoryScreen() {
         onEndReachedThreshold={0.5}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>🎮</Text>
+            <Ionicons name="time-outline" size={48} color={colors.textOnDarkTertiary} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>No Games Yet</Text>
             <Text style={styles.emptySubtext}>Your game history will appear here</Text>
           </View>
@@ -69,7 +70,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
   emptyState: { alignItems: 'center', paddingVertical: spacing.huge },
-  emptyEmoji: { fontSize: 48, marginBottom: spacing.md },
-  emptyTitle: { color: colors.text, fontSize: fontSize.lg, fontWeight: fontWeight.semibold as any },
-  emptySubtext: { color: colors.textTertiary, fontSize: fontSize.base, marginTop: spacing.sm },
+  emptyIcon: { marginBottom: spacing.md },
+  emptyTitle: { color: colors.textOnDark, fontSize: fontSize.lg, fontWeight: fontWeight.semibold as any },
+  emptySubtext: { color: colors.textOnDarkTertiary, fontSize: fontSize.base, marginTop: spacing.sm },
 });

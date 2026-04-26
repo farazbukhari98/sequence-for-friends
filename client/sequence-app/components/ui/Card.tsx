@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, StyleSheet, type ViewStyle } from 'react-native';
-import { colors, radius, spacing } from '@/theme';
+import { Animated, View, StyleSheet, TouchableOpacity, type ViewStyle } from 'react-native';
+import { colors, radius, spacing, shadows } from '@/theme';
+import { SurfaceTexture } from '@/components/ui/GameTexture';
 
 interface CardProps {
   children: React.ReactNode;
@@ -10,20 +11,68 @@ interface CardProps {
   active?: boolean;
 }
 
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+
 export function Card({ children, style, padding = 'base', onPress, active }: CardProps) {
-  const Container = onPress ? View : View;
+  const pressProgress = React.useRef(new Animated.Value(0)).current;
+
+  const animatePress = (toValue: number) => {
+    Animated.spring(pressProgress, {
+      toValue,
+      useNativeDriver: true,
+      speed: 24,
+      bounciness: 6,
+    }).start();
+  };
+
+  const animatedStyle = onPress
+    ? {
+        transform: [
+          { translateY: pressProgress.interpolate({ inputRange: [0, 1], outputRange: [active ? -2 : 0, 2] }) },
+          { scale: pressProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.985] }) },
+        ],
+      }
+    : null;
+
+  const content = (
+    <>
+      <SurfaceTexture variant="card" intensity="subtle" style={styles.texture} />
+      <View style={styles.content}>{children}</View>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <AnimatedTouchableOpacity
+        style={[
+          styles.card,
+          { padding: spacing[padding] },
+          active && styles.cardActive,
+          style,
+          animatedStyle,
+        ]}
+        onPress={onPress}
+        onPressIn={() => animatePress(1)}
+        onPressOut={() => animatePress(0)}
+        activeOpacity={0.92}
+      >
+        {content}
+      </AnimatedTouchableOpacity>
+    );
+  }
+
   return (
-    <Container
+    <View
       style={[
         styles.card,
         { padding: spacing[padding] },
         active && styles.cardActive,
+        active && styles.cardActiveLift,
         style,
       ]}
-      onTouchEnd={onPress}
     >
-      {children}
-    </Container>
+      {content}
+    </View>
   );
 }
 
@@ -41,11 +90,24 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    overflow: 'hidden',
+    position: 'relative',
+    // Drop shadow doesn't work if overflow is hidden on iOS sometimes, but we'll try to keep it
+    ...shadows.sm,
   },
   cardActive: {
     borderColor: colors.cardBorderActive,
     backgroundColor: colors.cardBgHover,
+    // Slightly lifted shadow when active
+    ...shadows.md,
+  },
+  cardActiveLift: {
+    transform: [{ translateY: -2 }],
+  },
+  texture: {
+    opacity: 0.42,
+  },
+  content: {
+    position: 'relative',
   },
   section: {
     padding: spacing.base,

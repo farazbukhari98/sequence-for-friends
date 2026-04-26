@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getUserStats,
+  incrementSeriesStats,
   insertGameHistory,
   type DbGameHistory,
   type DbGameParticipant,
@@ -107,6 +108,23 @@ class FakeD1Database {
           updated_at: Number(params[21]),
         });
       }
+      return { success: true };
+    }
+
+    if (sql.includes('series_played = series_played + 1')) {
+      const userId = String(params[3]);
+      const current = this.userStats.get(userId);
+      if (!current) {
+        throw new Error(`Missing stats row for ${userId}`);
+      }
+
+      this.userStats.set(userId, {
+        ...current,
+        series_played: current.series_played + 1,
+        series_won: current.series_won + Number(params[0]),
+        series_lost: current.series_lost + Number(params[1]),
+        updated_at: Number(params[2]),
+      });
       return { success: true };
     }
 
@@ -300,5 +318,25 @@ describe('stats persistence', () => {
     expect(stats?.first_move_wins).toBe(0);
     expect(stats?.total_play_time_ms).toBe(3500);
     expect(stats?.fastest_win_ms).toBe(1500);
+  });
+
+  it('increments series aggregate stats once per participant', async () => {
+    const db = new FakeD1Database();
+
+    await incrementSeriesStats(db as unknown as D1Database, [
+      { user_id: 'winner', won: 1 },
+      { user_id: 'loser', won: 0 },
+    ]);
+
+    expect(db.userStats.get('winner')).toMatchObject({
+      series_played: 1,
+      series_won: 1,
+      series_lost: 0,
+    });
+    expect(db.userStats.get('loser')).toMatchObject({
+      series_played: 1,
+      series_won: 0,
+      series_lost: 1,
+    });
   });
 });

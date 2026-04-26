@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyPlayerLeave,
   addBotToRoom,
   addPlayerToRoom,
   continueSeriesInRoom,
@@ -9,6 +10,7 @@ import {
   startGameInRoom,
   updateRoomSettings,
 } from '../worker/src/room-logic';
+import { detectNewSequences } from '../worker/src/rules/sequences';
 
 function createReadyPlayer(name: string, isHost = false) {
   const player = createPlayer(name, isHost);
@@ -37,6 +39,33 @@ function createReadySeriesRoom(seriesLength: 3 | 5 | 7 = 3) {
 }
 
 describe('King Of The Board room logic', () => {
+  it('should reject invalid turn timers when creating a room', () => {
+    const host = createReadyPlayer('Host', true);
+
+    expect(() => createRoomData('TIMER', 'Timer Room', host, 4, 2, 40 as any)).toThrow('Invalid turn timer');
+  });
+
+  it('should accept every supported turn timer when creating a room', () => {
+    const validTimers = [0, 15, 20, 30, 45, 60, 90, 120] as const;
+
+    for (const timer of validTimers) {
+      const host = createReadyPlayer('Host', true);
+      const room = createRoomData(`T${timer}`, 'Timer Room', host, 4, 2, timer);
+
+      expect(room.turnTimeLimit).toBe(timer);
+    }
+  });
+
+  it('should reject invalid turn timers when updating room settings', () => {
+    const host = createReadyPlayer('Host', true);
+    const room = createRoomData('TIMER', 'Timer Room', host, 4, 2);
+
+    const result = updateRoomSettings(room, host.id, { turnTimeLimit: 50 as any });
+
+    expect(result.error).toBe('Invalid turn timer');
+    expect(room.turnTimeLimit).toBe(0);
+  });
+
   it('should normalize sequence length to 5 and preserve timer and series settings', () => {
     const host = createReadyPlayer('Host', true);
     const room = createRoomData('TEST1', 'Test Room', host, 4, 2, 30, 2, 4, 5);
@@ -156,10 +185,7 @@ describe('King Of The Board room logic', () => {
 
     const finalResult = continueSeriesInRoom(room, host.id);
 
-    expect('error' in finalResult).toBe(true);
-    if ('error' in finalResult) {
-      expect(finalResult.error).toBe('Series over');
-    }
+    expect('seriesComplete' in finalResult).toBe(true);
     expect(room.seriesState).toMatchObject({
       gamesPlayed: 2,
       teamWins: [2, 0],
@@ -168,5 +194,85 @@ describe('King Of The Board room logic', () => {
     expect(room.phase).toBe('waiting');
     expect(room.gameState).toBeNull();
     expect(room.players.map(player => player.ready)).toEqual([true, false, false, false]);
+  });
+
+  it.each([
+    [3, 2],
+    [5, 3],
+    [7, 4],
+  ] as const)('should finish best of %i after %i wins', (seriesLength, winsNeeded) => {
+    const { room, host } = createReadySeriesRoom(seriesLength);
+
+    for (let win = 1; win <= winsNeeded; win++) {
+      if (!room.gameState) {
+        throw new Error(`Expected game state before win ${win}`);
+      }
+      room.gameState.winnerTeamIndex = 0;
+
+      const result = continueSeriesInRoom(room, host.id);
+
+      if (win < winsNeeded) {
+        expect('error' in result).toBe(false);
+        expect('seriesComplete' in result).toBe(false);
+        expect(room.seriesState?.seriesWinnerTeamIndex).toBeNull();
+      } else {
+        expect('seriesComplete' in result).toBe(true);
+      }
+    }
+
+    expect(room.seriesState?.teamWins[0]).toBe(winsNeeded);
+    expect(room.seriesState?.seriesWinnerTeamIndex).toBe(0);
+    expect(room.phase).toBe('waiting');
+  });
+
+  it('should transfer host to the first connected human when the host leaves a waiting room', () => {
+    const host = createReadyPlayer('Host', true);
+    const room = createRoomData('LEAVE', 'Leave Room', host, 4, 2);
+    const player = addPlayerToRoom(room, 'Player 2');
+    if ('error' in player) throw new Error(player.error);
+    const bot = addBotToRoom(room, 'easy');
+    if ('error' in bot) throw new Error(bot.error);
+
+    const result = applyPlayerLeave(room, host.id, 'leave');
+
+    expect(result).toMatchObject({ shouldCloseRoom: false, hostTransferred: true, playerFound: true });
+    expect(room.hostId).toBe(player.id);
+    expect(room.players.some(p => p.id === host.id)).toBe(false);
+    expect(room.players.find(p => p.id === room.hostId)?.isBot).not.toBe(true);
+  });
+
+  it('should transfer host and keep the host as disconnected when leaving an active game', () => {
+    const { room, host } = createReadySeriesRoom(3);
+    const nextHost = room.players.find(player => player.id !== host.id && !player.isBot);
+    if (!nextHost) throw new Error('Expected a next host');
+
+    const result = applyPlayerLeave(room, host.id, 'leave');
+
+    expect(result).toMatchObject({ shouldCloseRoom: false, hostTransferred: true, playerFound: true });
+    expect(room.hostId).toBe(nextHost.id);
+    expect(room.players.find(player => player.id === host.id)?.connected).toBe(false);
+    expect(room.phase).toBe('in-game');
+    expect(room.gameState).not.toBeNull();
+  });
+
+  it('should close the room when the host leaves with no human transfer candidate', () => {
+    const host = createReadyPlayer('Host', true);
+    const room = createRoomData('BOTTY', 'Bot Room', host, 2, 2);
+    const bot = addBotToRoom(room, 'easy');
+    if ('error' in bot) throw new Error(bot.error);
+
+    const result = applyPlayerLeave(room, host.id, 'leave');
+
+    expect(result).toMatchObject({ shouldCloseRoom: true, hostTransferred: false, playerFound: true });
+  });
+
+  it('should detect 4-chip Blitz sequences while standard still requires 5 chips', () => {
+    const board = Array.from({ length: 10 }, () => Array(10).fill(null));
+    for (let col = 1; col <= 4; col++) {
+      board[4][col] = 0;
+    }
+
+    expect(detectNewSequences(board, 4, 4, 0, new Set(), 0, 2, 4)).toHaveLength(1);
+    expect(detectNewSequences(board, 4, 4, 0, new Set(), 0, 2, 5)).toHaveLength(0);
   });
 });

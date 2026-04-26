@@ -1,5 +1,5 @@
 -- Migration 0001: Add trophy tracking columns
--- Run with: wrangler d1 execute sequence-db --file=worker/src/db/migrations/0001_add_trophies.sql
+-- Apply with: wrangler d1 migrations apply sequence-db
 
 -- Track impossible bot wins for trophy/achievement system
 ALTER TABLE user_stats ADD COLUMN impossible_bot_wins INTEGER NOT NULL DEFAULT 0;

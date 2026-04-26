@@ -147,13 +147,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   overlayTitle: {
-    color: colors.text,
+    color: colors.textOnDark,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold as any,
     textAlign: 'center',
   },
   overlayMessage: {
-    color: colors.textSecondary,
+    color: colors.textOnDarkSecondary,
     fontSize: fontSize.sm,
     marginTop: spacing.sm,
     textAlign: 'center',

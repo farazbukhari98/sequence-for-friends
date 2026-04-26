@@ -27,6 +27,7 @@ preview_id = "0f52725627654e0c8e061b15fc535539"
 binding = "DB"
 database_name = "sequence-db"
 database_id = "933724c1-95ba-4d39-bcff-98ae9372c7c7"
+migrations_dir = "src/db/migrations"
 
 [vars]
 APNS_SANDBOX = "false"

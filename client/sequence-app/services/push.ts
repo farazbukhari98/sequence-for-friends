@@ -1,9 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
-import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from './api';
 import { getSessionToken } from './auth';
+import { parseInviteRoomCode } from '@/lib/deepLinks';
 
 // Configure notification handler for foreground
 Notifications.setNotificationHandler({
@@ -19,7 +19,7 @@ Notifications.setNotificationHandler({
 let pushToken: string | null = null;
 let notificationListener: Notifications.EventSubscription | null = null;
 let responseListener: Notifications.EventSubscription | null = null;
-let linkingSubscription: { remove: () => void } | null = null;
+let linkListener: { remove: () => void } | null = null;
 let onInviteDeepLink: ((roomCode: string) => void) | null = null;
 
 type PermissionResult = { status: string; granted: boolean };
@@ -57,14 +57,12 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   try {
-    const projectId =
-      Constants.easConfig?.projectId ??
-      Constants.expoConfig?.extra?.eas?.projectId;
+    if (Platform.OS !== 'ios') {
+      return null;
+    }
 
-    const tokenData = projectId
-      ? await Notifications.getExpoPushTokenAsync({ projectId })
-      : await Notifications.getExpoPushTokenAsync();
-    pushToken = tokenData.data;
+    const tokenData = await Notifications.getDevicePushTokenAsync();
+    pushToken = typeof tokenData.data === 'string' ? tokenData.data : null;
 
     // Register with backend
     const sessionToken = await getSessionToken();
@@ -99,8 +97,8 @@ export function setupNotificationListeners(
   });
 
   // Handle deep links when app is opened from terminated state
-  linkingSubscription?.remove();
-  linkingSubscription = Linking.addEventListener('url', (event) => {
+  linkListener?.remove();
+  linkListener = Linking.addEventListener('url', (event) => {
     handleDeepLink(event.url);
   });
 
@@ -111,23 +109,19 @@ export function setupNotificationListeners(
 }
 
 function handleDeepLink(url: string) {
-  // Handle sequencegame://join/{code} or sequencegame://invite/{code}
-  const prefix = 'sequencegame://';
-  if (!url.startsWith(prefix)) return;
-
-  const path = url.substring(prefix.length);
-  // Paths: join/{code} or invite/{code}
-  const match = path.match(/^(?:join|invite)\/([A-Z0-9]+)$/i);
-  if (match) {
-    onInviteDeepLink?.(match[1].toUpperCase());
+  const roomCode = parseInviteRoomCode(url);
+  if (roomCode) {
+    onInviteDeepLink?.(roomCode);
   }
 }
 
 export function cleanupNotificationListeners() {
   notificationListener?.remove();
   responseListener?.remove();
-  linkingSubscription?.remove();
-  linkingSubscription = null;
+  linkListener?.remove();
+  notificationListener = null;
+  responseListener = null;
+  linkListener = null;
   onInviteDeepLink = null;
 }
 

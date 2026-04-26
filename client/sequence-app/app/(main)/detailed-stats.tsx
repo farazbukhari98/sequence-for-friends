@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/authStore';
 import { useFriendsStore } from '@/stores/friendsStore';
 import { Background } from '@/components/ui/Background';
@@ -82,10 +83,22 @@ export default function DetailedStatsScreen() {
         {stats.insights && (
           <Card style={styles.card}>
             <Text style={styles.cardTitle}>Insights</Text>
-            <Text style={styles.insightItem}>⏱️ Avg game duration: {formatMs(stats.insights.avgGameDurationMs)}</Text>
-            <Text style={styles.insightItem}>🎯 Jack usage rate: {pct(stats.insights.jackUsageRate)}</Text>
-            <Text style={styles.insightItem}>⚡ First move win rate: {pct(stats.insights.firstMoveWinRate)}</Text>
-            <Text style={styles.insightItem}>🕐 Total play time: {stats.insights.totalPlayTimeFormatted}</Text>
+            <View style={styles.insightRow}>
+              <Ionicons name="stopwatch-outline" size={18} color={colors.primary} />
+              <Text style={styles.insightItem}>Avg game duration: {formatMs(stats.insights.avgGameDurationMs)}</Text>
+            </View>
+            <View style={styles.insightRow}>
+              <Ionicons name="disc-outline" size={18} color={colors.gold} />
+              <Text style={styles.insightItem}>Jack usage rate: {pct(stats.insights.jackUsageRate)}</Text>
+            </View>
+            <View style={styles.insightRow}>
+              <Ionicons name="flash-outline" size={18} color={colors.warning} />
+              <Text style={styles.insightItem}>First move win rate: {pct(stats.insights.firstMoveWinRate)}</Text>
+            </View>
+            <View style={styles.insightRow}>
+              <Ionicons name="time-outline" size={18} color={colors.cyan} />
+              <Text style={styles.insightItem}>Total play time: {stats.insights.totalPlayTimeFormatted}</Text>
+            </View>
           </Card>
         )}
       </ScrollView>
@@ -97,10 +110,11 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.huge },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: colors.textSecondary, fontSize: fontSize.base },
+  loadingText: { color: colors.textOnDarkSecondary, fontSize: fontSize.base },
   card: { padding: spacing.lg, marginBottom: spacing.md },
   cardTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.semibold as any, marginBottom: spacing.md },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around' },
   emptyText: { color: colors.textTertiary, fontSize: fontSize.sm, textAlign: 'center', paddingVertical: spacing.md },
-  insightItem: { color: colors.textSecondary, fontSize: fontSize.base, paddingVertical: spacing.xs },
+  insightRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
+  insightItem: { color: colors.textSecondary, fontSize: fontSize.base },
 });

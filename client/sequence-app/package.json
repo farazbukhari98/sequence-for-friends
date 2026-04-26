@@ -1,6 +1,6 @@
 {
   "name": "sequence-app",
-  "version": "2.0.0",
+  "version": "2.0.5",
   "description": "Sequence For Friends - Multiplayer card game",
   "main": "expo-router/entry",
   "scripts": {
@@ -8,8 +8,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "typescript": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "jest --runInBand",
+    "typescript": "tsc --noEmit"
   },
   "keywords": [],
   "author": "Faraz Bukhari",
@@ -17,32 +17,36 @@
   "type": "commonjs",
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
-    "expo": "~55.0.15",
+    "expo": "~55.0.17",
     "expo-apple-authentication": "~55.0.13",
-    "expo-auth-session": "~55.0.14",
+    "expo-auth-session": "~55.0.15",
     "expo-constants": "~55.0.14",
     "expo-crypto": "~55.0.14",
     "expo-haptics": "~55.0.14",
-    "expo-image": "~55.0.8",
+    "expo-image": "~55.0.9",
     "expo-linear-gradient": "~55.0.13",
-    "expo-linking": "~55.0.13",
-    "expo-notifications": "~55.0.19",
-    "expo-router": "~55.0.12",
+    "expo-linking": "~55.0.14",
+    "expo-notifications": "~55.0.20",
+    "expo-router": "~55.0.13",
     "expo-secure-store": "~55.0.13",
-    "expo-splash-screen": "~55.0.18",
+    "expo-splash-screen": "~55.0.19",
     "expo-status-bar": "~55.0.5",
     "immer": "^11.1.4",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-native": "0.83.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.6",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-safe-area-context": "~5.6.2",
-    "react-native-screens": "^4.23.0",
+    "react-native-screens": "~4.23.0",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "29.5.14",
     "@types/react": "~19.2.0",
-    "typescript": "~5.9.2",
-    "vitest": "^3.2.4"
+    "jest": "~29.7.0",
+    "jest-expo": "~55.0.16",
+    "react-test-renderer": "^19.2.0",
+    "typescript": "~5.9.2"
   }
 }

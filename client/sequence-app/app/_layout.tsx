@@ -1,4 +1,5 @@
-import { Slot, useRouter } from 'expo-router';
+import { Slot } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -10,23 +11,29 @@ import { Background } from '@/components/ui/Background';
 
 export default function RootLayout() {
   const router = useRouter();
-  const { restoreSession, sessionToken } = useAuthStore();
-  const setPendingRoomCode = useGameStore((state) => state.setPendingRoomCode);
+  const { restoreSession, sessionToken, user } = useAuthStore();
+  const pendingRoomCode = useGameStore((state) => state.pendingRoomCode);
 
   useEffect(() => {
     restoreSession();
   }, []);
 
   useEffect(() => {
+    if (sessionToken && user && pendingRoomCode) {
+      router.replace('/(main)/join-room');
+    }
+  }, [pendingRoomCode, router, sessionToken, user]);
+
+  useEffect(() => {
     if (sessionToken) {
       registerForPushNotifications();
       setupNotificationListeners((roomCode) => {
-        setPendingRoomCode(roomCode);
-        router.push('/(main)/join-room');
+        useGameStore.getState().setPendingRoomCode(roomCode);
+        router.replace('/(main)/join-room');
       });
       return () => cleanupNotificationListeners();
     }
-  }, [router, sessionToken, setPendingRoomCode]);
+  }, [router, sessionToken]);
 
   return (
     <SafeAreaProvider>

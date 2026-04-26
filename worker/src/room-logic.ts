@@ -18,9 +18,14 @@ import {
   DEFAULT_SEQUENCE_LENGTH,
   DEFAULT_SERIES_LENGTH,
   DEFAULT_GAME_VARIANT,
+  TURN_TIME_OPTIONS,
 } from '../../shared/types.js';
 import { createGameConfig, initializeGame, assignTeams, interleavePlayersByTeam } from './gameState.js';
 import { createBotPlayer, generateBotName } from './bot.js';
+
+export function isValidTurnTimeLimit(value: unknown): value is TurnTimeLimit {
+  return TURN_TIME_OPTIONS.some(option => option.value === value);
+}
 
 /**
  * Generate a random room code (5 alphanumeric characters)
@@ -177,6 +182,10 @@ export function createRoomData(
     throw new Error(`Invalid sequence length: ${sequenceLength}. Must be 4 or 5`);
   }
 
+  if (!isValidTurnTimeLimit(turnTimeLimit)) {
+    throw new Error('Invalid turn timer');
+  }
+
   const now = Date.now();
 
   const room: Room = {
@@ -266,6 +275,48 @@ export function removePlayerFromRoom(room: Room, playerId: string): boolean {
   return true;
 }
 
+export function findHostTransferCandidate(room: Room, leavingPlayerId: string): Player | null {
+  return [...room.players]
+    .filter(player => player.id !== leavingPlayerId && !player.isBot && player.connected)
+    .sort((a, b) => a.seatIndex - b.seatIndex)[0] ?? null;
+}
+
+export function applyPlayerLeave(
+  room: Room,
+  playerId: string,
+  intent: 'leave' | 'end' = 'leave'
+): { shouldCloseRoom: boolean; hostTransferred: boolean; playerFound: boolean } {
+  const player = room.players.find(p => p.id === playerId);
+  if (!player) {
+    return { shouldCloseRoom: false, hostTransferred: false, playerFound: false };
+  }
+
+  const isHost = room.hostId === playerId;
+
+  if (isHost && intent === 'end') {
+    return { shouldCloseRoom: true, hostTransferred: false, playerFound: true };
+  }
+
+  let hostTransferred = false;
+  if (isHost) {
+    const nextHost = findHostTransferCandidate(room, playerId);
+    if (!nextHost) {
+      return { shouldCloseRoom: true, hostTransferred: false, playerFound: true };
+    }
+
+    room.hostId = nextHost.id;
+    hostTransferred = true;
+  }
+
+  removePlayerFromRoom(room, playerId);
+
+  return {
+    shouldCloseRoom: room.players.length === 0,
+    hostTransferred,
+    playerFound: true,
+  };
+}
+
 /**
  * Kick a player (host only)
  */
@@ -319,6 +370,9 @@ export function updateRoomSettings(
   }
 
   if (settings.turnTimeLimit !== undefined) {
+    if (!isValidTurnTimeLimit(settings.turnTimeLimit)) {
+      return { error: 'Invalid turn timer' };
+    }
     room.turnTimeLimit = settings.turnTimeLimit;
   }
 
@@ -385,6 +439,7 @@ export function startGameInRoom(room: Room, hostId: string): GameState | { error
   if (room.seriesLength > 0 && !room.seriesState) {
     room.seriesState = {
       seriesLength: room.seriesLength,
+      seriesId: crypto.randomUUID(),
       gamesPlayed: 0,
       teamWins: Array(room.teamCount).fill(0),
       seriesWinnerTeamIndex: null,
@@ -400,7 +455,7 @@ export function startGameInRoom(room: Room, hostId: string): GameState | { error
 /**
  * Continue series
  */
-export function continueSeriesInRoom(room: Room, hostId: string): GameState | { error: string } {
+export function continueSeriesInRoom(room: Room, hostId: string): GameState | { seriesComplete: true } | { error: string } {
   if (room.hostId !== hostId) {
     return { error: 'Only the host can continue the series' };
   }
@@ -437,7 +492,7 @@ export function continueSeriesInRoom(room: Room, hostId: string): GameState | { 
       player.discardPile = [];
     }
 
-    return { error: 'Series over' };
+    return { seriesComplete: true };
   }
 
   const config = createGameConfig(room.players.length, room.sequencesToWin, room.sequenceLength, room.gameVariant);

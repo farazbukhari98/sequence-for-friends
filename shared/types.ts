@@ -212,9 +212,11 @@ export const DEFAULT_SERIES_LENGTH: SeriesLength = 0;
 
 export interface SeriesState {
   seriesLength: SeriesLength; // 3 = best of 3
+  seriesId: string;
   gamesPlayed: number;
   teamWins: number[]; // Wins per team index
   seriesWinnerTeamIndex: number | null;
+  seriesStatsPersisted?: boolean;
 }
 
 // ============================================
@@ -461,12 +463,12 @@ export interface QuickMessageData {
 
 // Client -> Server events
 export interface ClientToServerEvents {
-  'create-bot-game': (data: { playerName: string; difficulty: BotDifficulty; sequenceLength?: SequenceLength }, callback: (response: CreateRoomResponse) => void) => void;
+  'create-bot-game': (data: { playerName: string; difficulty: BotDifficulty; sequenceLength?: SequenceLength; sequencesToWin?: SequencesToWin; seriesLength?: SeriesLength }, callback: (response: CreateRoomResponse) => void) => void;
   'add-bot': (data: { difficulty: BotDifficulty }, callback: (response: { success: boolean; error?: string }) => void) => void;
   'remove-bot': (data: { botPlayerId: string }, callback: (response: { success: boolean; error?: string }) => void) => void;
   'create-room': (data: { roomName: string; playerName: string; maxPlayers: number; teamCount: number; turnTimeLimit?: TurnTimeLimit; sequencesToWin?: SequencesToWin; sequenceLength?: SequenceLength; seriesLength?: SeriesLength }, callback: (response: CreateRoomResponse) => void) => void;
   'join-room': (data: { roomCode: string; playerName: string; token?: string }, callback: (response: JoinRoomResponse) => void) => void;
-  'leave-room': () => void;
+  'leave-room': (data?: { intent?: 'leave' | 'end' }) => void;
   'start-game': (callback: (response: StartGameResponse) => void) => void;
   'kick-player': (playerId: string) => void;
   'game-action': (action: GameAction, callback: (response: MoveResult) => void) => void;
@@ -475,7 +477,7 @@ export interface ClientToServerEvents {
   'toggle-ready': (callback: (response: { success: boolean; error?: string }) => void) => void;
   'request-team-switch': (toTeamIndex: number, callback: (response: { success: boolean; error?: string }) => void) => void;
   'respond-team-switch': (data: { playerId: string; approved: boolean }, callback: (response: { success: boolean; error?: string }) => void) => void;
-  'continue-series': (callback: (response: { success: boolean; error?: string }) => void) => void; // Continue to next game in series
+  'continue-series': (callback: (response: { success: boolean; error?: string; seriesComplete?: boolean; roomInfo?: RoomInfo }) => void) => void; // Continue to next game in series
   'end-series': (callback: (response: { success: boolean; error?: string }) => void) => void; // End series early, return to lobby
   'send-emote': (emote: EmoteType) => void;
   'send-quick-message': (message: QuickMessageType) => void;

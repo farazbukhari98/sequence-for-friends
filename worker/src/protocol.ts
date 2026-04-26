@@ -63,6 +63,7 @@ export interface ReconnectToRoomMessage {
 export interface LeaveRoomMessage {
   type: 'leave-room';
   id?: string;
+  data?: { intent?: 'leave' | 'end' };
 }
 
 export interface StartGameMessage {
@@ -143,6 +144,10 @@ export interface SendQuickMessage {
   data: { message: QuickMessageType };
 }
 
+export interface PingMessage {
+  type: 'ping';
+}
+
 export type ClientMessage =
   | CreateRoomMessage
   | CreateBotGameMessage
@@ -161,7 +166,8 @@ export type ClientMessage =
   | AddBotMessage
   | RemoveBotMessage
   | SendEmoteMessage
-  | SendQuickMessage;
+  | SendQuickMessage
+  | PingMessage;
 
 // ============================================
 // SERVER -> CLIENT MESSAGES

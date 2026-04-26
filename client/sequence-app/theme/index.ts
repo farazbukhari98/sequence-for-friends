@@ -1,15 +1,20 @@
 import { Platform } from 'react-native';
 
 // ============================================
-// COLORS
+// COLORS - Classic Game Night Theme
 // ============================================
 export const colors = {
-  // Brand
-  primary: '#6366f1',
-  primaryLight: '#818cf8',
-  primaryDark: '#4f46e5',
-  purple: '#8b5cf6',
-  purpleLight: '#a78bfa',
+  // Brand - Wood Brown & Brass
+  primary: '#8B5A2B', // Rich wood brown
+  primaryLight: '#A67D46',
+  primaryDark: '#663E14',
+  purple: '#8B5A2B', // Kept for backwards compatibility
+  purpleLight: '#A67D46',
+
+  // Luxury Accents - Gold/Brass
+  gold: '#D4AF37',
+  goldLight: '#F4D03F',
+  champagne: '#F7E7CE',
 
   // Semantic
   success: '#22c55e',
@@ -21,41 +26,51 @@ export const colors = {
   cyan: '#06b6d4',
   orange: '#f97316',
 
-  // Team
-  teamBlue: '#2980b9',
-  teamBlueLight: '#3498db',
-  teamGreen: '#27ae60',
-  teamGreenLight: '#2ecc71',
-  teamRed: '#c0392b',
-  teamRedLight: '#e74c3c',
+  // Team - Saturated Poker Chip Colors
+  teamBlue: '#0052A3',
+  teamBlueLight: '#337ECC',
+  teamGreen: '#008000',
+  teamGreenLight: '#339933',
+  teamRed: '#CC0000',
+  teamRedLight: '#E63333',
 
-  // Background
-  background: '#050505',
-  bgSecondary: '#0a0a0a',
-  bgTertiary: '#111111',
-  bgElevated: '#191919',
-  bgGradientStart: '#050505',
-  bgGradientEnd: '#0b1020',
+  // Background - Deep Felt Green
+  background: '#0D3B22',
+  bgSecondary: '#114D2E',
+  bgTertiary: '#165A36',
+  bgElevated: '#1A6A40',
+  bgGradientStart: '#0D3B22',
+  bgGradientEnd: '#165A36',
 
-  // Cards & Surfaces
-  cardBg: 'rgba(255,255,255,0.06)',
-  cardBgHover: 'rgba(255,255,255,0.10)',
-  cardBorder: 'rgba(255,255,255,0.08)',
-  cardBorderActive: 'rgba(255,255,255,0.20)',
+  // Cards & Surfaces with wood/brass borders
+  cardBg: '#F8F1E4', // Off-white, crisp warm color mimicking cards
+  cardBgHover: '#E8DCC4',
+  cardBorder: 'rgba(139, 90, 43, 0.4)', // Wood brown border
+  cardBorderActive: '#8B5A2B',
 
   // Overlay
   overlay: 'rgba(0,0,0,0.6)',
   overlayLight: 'rgba(0,0,0,0.3)',
 
-  // Text
-  text: '#f8fafc',
-  textSecondary: 'rgba(255,255,255,0.7)',
-  textTertiary: 'rgba(255,255,255,0.5)',
-  textDisabled: 'rgba(255,255,255,0.3)',
+  // Text (Dark for light cards/surfaces - default since most content is on cards)
+  text: '#1C1914',
+  textSecondary: '#5C5446',
+  textTertiary: '#8C8373',
+  textDisabled: 'rgba(28, 25, 20, 0.3)',
+
+  // Light text for dark backgrounds (felt)
+  textOnDark: '#f8fafc',
+  textOnDarkSecondary: 'rgba(255,255,255,0.7)',
+  textOnDarkTertiary: 'rgba(255,255,255,0.5)',
+
+  // Dark text explicitly
+  textDark: '#1C1914',
+  textDarkSecondary: '#5C5446',
+  textDarkTertiary: '#8C8373',
 
   // Misc
-  border: 'rgba(255,255,255,0.12)',
-  divider: 'rgba(255,255,255,0.06)',
+  border: 'rgba(139, 90, 43, 0.3)',
+  divider: 'rgba(28, 25, 20, 0.1)',
   chip: 'rgba(255,255,255,0.08)',
 } as const;
 
@@ -79,12 +94,12 @@ export const spacing = {
 // BORDER RADIUS
 // ============================================
 export const radius = {
-  sm: 8,
-  md: 12,
-  card: 14,
-  lg: 16,
-  xl: 18,
-  button: 16,
+  sm: 4,
+  md: 8,
+  card: 10,
+  lg: 12,
+  xl: 16,
+  button: 8,
   xxl: 20,
   full: 9999,
 } as const;
@@ -124,35 +139,42 @@ export const lineHeight = {
 } as const;
 
 // ============================================
-// SHADOWS
+// SHADOWS - Sharper and grounded
 // ============================================
 export const shadows = {
   sm: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowRadius: 2,
+    elevation: 3,
   },
   md: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 6,
   },
   lg: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowRadius: 6,
+    elevation: 10,
   },
   glow: {
-    shadowColor: '#6366f1',
+    shadowColor: '#8B5A2B',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 0,
+  },
+  goldGlow: {
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
     elevation: 0,
   },
 } as const;
@@ -168,21 +190,61 @@ export const animation = {
 } as const;
 
 // ============================================
-// AVATARS
+// AVATARS - Game-themed symbols
 // ============================================
-export const AVATAR_EMOJIS = [
-  '🐻', '🦊', '🐱', '🐶', '🦉', '🦄', '🐉', '🐙',
-  '🐧', '🐨', '🦁', '🐺', '🦅', '🐰', '🐼', '👾',
+// Symbol IDs that map to Ionicons
+export const AVATAR_SYMBOLS = [
+  'spade',      // Card suits
+  'heart',
+  'diamond',
+  'club',
+  'crown',      // Gaming/Royalty
+  'ace',
+  'chip',
+  'dice',
+  'joker',      // Face cards
+  'king',
+  'queen',
+  'jack',
+  'star',       // Premium
+  'shield',
+  'sword',
+  'gem',
 ] as const;
+
+// Map symbol IDs to Ionicons names
+export const AVATAR_ICON_MAP: Record<string, string> = {
+  spade: 'spade',
+  heart: 'heart',
+  diamond: 'diamond',
+  club: 'club',
+  crown: 'ribbon',
+  ace: 'flash',
+  chip: 'ellipse',
+  dice: 'dice',
+  joker: 'happy',
+  king: 'shield',
+  queen: 'flower',
+  jack: 'male',
+  star: 'star',
+  shield: 'shield-checkmark',
+  sword: 'flash',
+  gem: 'diamond',
+};
 
 export const AVATAR_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#ef4444',
-  '#f97316', '#eab308', '#22c55e', '#14b8a6',
-  '#06b6d4', '#3b82f6',
+  '#0052A3', '#008000', '#CC0000', '#8B5A2B',
+  '#D4AF37', '#eab308', '#f97316', '#06b6d4',
+  '#14b8a6', '#ec4899',
 ] as const;
 
-export type AvatarEmoji = (typeof AVATAR_EMOJIS)[number];
+// Legacy support - keeping AVATAR_EMOJIS for backward compatibility during migration
+export const AVATAR_EMOJIS = AVATAR_SYMBOLS;
+
+export type AvatarSymbol = (typeof AVATAR_SYMBOLS)[number];
 export type AvatarColor = (typeof AVATAR_COLORS)[number];
+// Legacy type alias
+export type AvatarEmoji = AvatarSymbol;
 
 // ============================================
 // HELPERS

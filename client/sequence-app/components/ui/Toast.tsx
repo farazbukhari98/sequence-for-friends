@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Text, StyleSheet, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, spacing, fontSize } from '@/theme';
 
 interface ToastProps {
@@ -10,6 +11,7 @@ interface ToastProps {
 }
 
 export function Toast({ message, type = 'error', onDismiss, duration = 3000 }: ToastProps) {
+  const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -42,7 +44,17 @@ export function Toast({ message, type = 'error', onDismiss, duration = 3000 }: T
   const bgColor = type === 'error' ? colors.error : type === 'success' ? colors.success : colors.warning;
 
   return (
-    <Animated.View style={[styles.container, { transform: [{ translateY }], opacity }]}>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          backgroundColor: bgColor,
+          top: Math.max(spacing.md, insets.top + spacing.xs),
+          transform: [{ translateY }],
+          opacity,
+        },
+      ]}
+    >
       <Text style={styles.message}>{message}</Text>
     </Animated.View>
   );
@@ -51,7 +63,6 @@ export function Toast({ message, type = 'error', onDismiss, duration = 3000 }: T
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
     backgroundColor: colors.error,

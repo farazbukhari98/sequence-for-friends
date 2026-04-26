@@ -1,5 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, type ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, fontSize, fontWeight, radius } from '@/theme';
 
 interface HeaderBarProps {
@@ -10,8 +12,10 @@ interface HeaderBarProps {
 }
 
 export function HeaderBar({ title, onBack, rightAction, style }: HeaderBarProps) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={[styles.header, style]}>
+    <View style={[styles.header, { paddingTop: Math.max(spacing.md, insets.top + spacing.xs) }, style]}>
       {onBack && (
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backIcon}>‹</Text>
@@ -35,7 +39,7 @@ export function SheetHeader({ title, onClose, style }: SheetHeaderProps) {
       <Text style={styles.sheetTitle}>{title}</Text>
       {onClose && (
         <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-          <Text style={styles.closeIcon}>✕</Text>
+          <Ionicons name="close" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
       )}
     </View>
@@ -68,7 +72,7 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     textAlign: 'center',
-    color: colors.text,
+    color: colors.textOnDark,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold as any,
   },
@@ -99,9 +103,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  closeIcon: {
-    color: colors.textSecondary,
-    fontSize: 16,
   },
 });

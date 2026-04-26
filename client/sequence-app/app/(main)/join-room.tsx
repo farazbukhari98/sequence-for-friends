@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { useGameStore } from '@/stores/gameStore';
@@ -19,20 +19,20 @@ export default function JoinRoomScreen() {
   React.useEffect(() => {
     if (pendingRoomCode) {
       setCode(pendingRoomCode);
+      setPendingRoomCode(null);
     }
-  }, [pendingRoomCode]);
+  }, [pendingRoomCode, setPendingRoomCode]);
 
   const handleJoin = async () => {
     if (!sessionToken || !user) return;
     const trimmed = code.trim().toUpperCase();
-    if (trimmed.length < 4) {
-      Alert.alert('Invalid Code', 'Please enter a valid room code');
+    if (trimmed.length !== 5) {
+      Alert.alert('Invalid Code', 'Room codes are 5 characters.');
       return;
     }
     setIsJoining(true);
     try {
       await joinRoom(trimmed, user.displayName || user.username, sessionToken);
-      setPendingRoomCode(null);
       router.push('/(game)/lobby');
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -44,20 +44,18 @@ export default function JoinRoomScreen() {
   return (
     <Background style={styles.container}>
       <HeaderBar title="Join Game" onBack={() => router.back()} />
-      <View style={styles.content}>
+      <KeyboardAvoidingView style={styles.content} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Card style={styles.card}>
           <Text style={styles.title}>Enter Room Code</Text>
-          <Text style={styles.subtitle}>
-            {pendingRoomCode ? `Invite detected for room ${pendingRoomCode}` : 'Ask the room host for the 4-letter code'}
-          </Text>
+          <Text style={styles.subtitle}>Ask the room host for the 5-character code</Text>
           <TextInput
             style={styles.codeInput}
             value={code}
             onChangeText={(t) => setCode(t.toUpperCase())}
-            placeholder="ABCD"
+            placeholder="ABCDE"
             placeholderTextColor={colors.textDisabled}
             autoCapitalize="characters"
-            maxLength={6}
+            maxLength={5}
             textAlign="center"
             autoFocus
           />
@@ -65,10 +63,10 @@ export default function JoinRoomScreen() {
             title="Join Room"
             onPress={handleJoin}
             loading={isJoining}
-            disabled={code.trim().length < 4}
+            disabled={code.trim().length !== 5}
           />
         </Card>
-      </View>
+      </KeyboardAvoidingView>
     </Background>
   );
 }
@@ -95,7 +93,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
-    color: colors.text,
+    color: colors.textOnDark,
     fontSize: fontSize.huge,
     fontWeight: fontWeight.bold as any,
     letterSpacing: 8,

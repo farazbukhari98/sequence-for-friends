@@ -1,6 +1,27 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, spacing, radius, AVATAR_EMOJIS, AVATAR_COLORS, type AvatarColor } from '@/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, spacing, radius, AVATAR_SYMBOLS, AVATAR_COLORS, type AvatarColor } from '@/theme';
+
+// Map symbol IDs to Ionicons names
+const SYMBOL_TO_ICON: Record<string, string> = {
+  spade: 'caret-up',
+  heart: 'heart',
+  diamond: 'diamond',
+  club: 'leaf',
+  crown: 'ribbon',
+  ace: 'flash',
+  chip: 'ellipse',
+  dice: 'dice',
+  joker: 'happy',
+  king: 'shield',
+  queen: 'flower',
+  jack: 'person',
+  star: 'star',
+  shield: 'shield-checkmark',
+  sword: 'flash-outline',
+  gem: 'diamond-outline',
+};
 
 interface AvatarBubbleProps {
   avatarId: string;
@@ -10,9 +31,11 @@ interface AvatarBubbleProps {
 }
 
 export function AvatarBubble({ avatarId, avatarColor, size = 44, showBorder = false }: AvatarBubbleProps) {
-  const emojiIndex = (AVATAR_EMOJIS as readonly string[]).indexOf(avatarId as string);
-  const emoji = emojiIndex >= 0 ? AVATAR_EMOJIS[emojiIndex] : avatarId;
-  const fontSize = Math.round(size * 0.5);
+  const iconSize = Math.round(size * 0.5);
+
+  // Check if avatarId is a symbol (new system) or potentially an emoji (legacy)
+  const isSymbol = AVATAR_SYMBOLS.includes(avatarId as any);
+  const iconName = isSymbol ? SYMBOL_TO_ICON[avatarId] : null;
 
   return (
     <View style={[
@@ -25,7 +48,12 @@ export function AvatarBubble({ avatarId, avatarColor, size = 44, showBorder = fa
       },
       showBorder && styles.bordered,
     ]}>
-      <Text style={[styles.emoji, { fontSize: fontSize }]}>{emoji}</Text>
+      {iconName ? (
+        <Ionicons name={iconName as any} size={iconSize} color="#fff" />
+      ) : (
+        // Fallback: render first letter of avatarId if it's a name, or use default icon
+        <Ionicons name="person" size={iconSize} color="#fff" />
+      )}
     </View>
   );
 }
@@ -40,19 +68,26 @@ interface AvatarPickerProps {
 export function AvatarPicker({ selectedAvatar, selectedColor, onAvatarChange, onColorChange }: AvatarPickerProps) {
   return (
     <View style={styles.picker}>
-      <View style={styles.emojiGrid}>
-        {AVATAR_EMOJIS.map((emoji) => (
-          <TouchableOpacity
-            key={emoji}
-            style={[
-              styles.emojiOption,
-              selectedAvatar === emoji && styles.emojiOptionSelected,
-            ]}
-            onPress={() => onAvatarChange(emoji)}
-          >
-            <Text style={styles.emojiOptionText}>{emoji}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.symbolGrid}>
+        {AVATAR_SYMBOLS.map((symbol) => {
+          const iconName = SYMBOL_TO_ICON[symbol];
+          return (
+            <TouchableOpacity
+              key={symbol}
+              style={[
+                styles.symbolOption,
+                selectedAvatar === symbol && styles.symbolOptionSelected,
+              ]}
+              onPress={() => onAvatarChange(symbol)}
+            >
+              <Ionicons
+                name={iconName as any}
+                size={24}
+                color={selectedAvatar === symbol ? colors.primary : colors.text}
+              />
+            </TouchableOpacity>
+          );
+        })}
       </View>
       <View style={styles.colorRow}>
         {AVATAR_COLORS.map((color) => (
@@ -78,21 +113,18 @@ const styles = StyleSheet.create({
   },
   bordered: {
     borderWidth: 2,
-    borderColor: colors.cardBorderActive,
-  },
-  emoji: {
-    color: '#fff',
+    borderColor: colors.gold,
   },
   picker: {
     gap: spacing.md,
   },
-  emojiGrid: {
+  symbolGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
     justifyContent: 'center',
   },
-  emojiOption: {
+  symbolOption: {
     width: 52,
     height: 52,
     borderRadius: radius.md,
@@ -102,17 +134,15 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  emojiOptionSelected: {
+  symbolOptionSelected: {
     borderColor: colors.primary,
     backgroundColor: colors.cardBgHover,
-  },
-  emojiOptionText: {
-    fontSize: 24,
   },
   colorRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     gap: spacing.sm,
+    flexWrap: 'wrap',
   },
   colorOption: {
     width: 36,

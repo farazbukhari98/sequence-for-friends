@@ -114,10 +114,10 @@ export const TEAM_COLORS: Record<string, { hex: string; letter: string }> = {
   red: { hex: '#c0392b', letter: 'R' },
 };
 
-// Difficulty display helpers
-export const DIFFICULTY_INFO: Record<string, { emoji: string; color: string; label: string }> = {
-  easy: { emoji: '🟢', color: '#22c55e', label: 'Easy' },
-  medium: { emoji: '🟡', color: '#eab308', label: 'Medium' },
-  hard: { emoji: '🔴', color: '#ef4444', label: 'Hard' },
-  impossible: { emoji: '💀', color: '#a855f7', label: 'Impossible' },
+// Difficulty display helpers - using icon names instead of emojis
+export const DIFFICULTY_INFO: Record<string, { icon: string; color: string; label: string }> = {
+  easy: { icon: 'ellipse', color: '#22c55e', label: 'Easy' },
+  medium: { icon: 'ellipse', color: '#eab308', label: 'Medium' },
+  hard: { icon: 'ellipse', color: '#ef4444', label: 'Hard' },
+  impossible: { icon: 'skull', color: '#a855f7', label: 'Impossible' },
 };

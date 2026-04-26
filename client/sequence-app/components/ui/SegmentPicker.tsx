@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, type ViewStyle } from 'react-native';
-import { colors, radius, spacing, fontSize, fontWeight } from '@/theme';
+import { colors, radius, spacing, fontSize, fontWeight, shadows } from '@/theme';
+import { SurfaceTexture } from '@/components/ui/GameTexture';
+import { hapticSelection } from '@/lib/haptics';
 
 interface SegmentOption<T extends string> {
   label: string;
@@ -17,6 +19,7 @@ interface SegmentPickerProps<T extends string> {
 export function SegmentPicker<T extends string>({ options, selected, onSelect, style }: SegmentPickerProps<T>) {
   return (
     <View style={[styles.container, style]}>
+      <SurfaceTexture variant="card" intensity="subtle" style={styles.texture} />
       {options.map((option) => (
         <TouchableOpacity
           key={option.value}
@@ -24,9 +27,13 @@ export function SegmentPicker<T extends string>({ options, selected, onSelect, s
             styles.option,
             selected === option.value && styles.optionSelected,
           ]}
-          onPress={() => onSelect(option.value)}
+          onPress={() => {
+            hapticSelection();
+            onSelect(option.value);
+          }}
           activeOpacity={0.7}
         >
+          {selected === option.value && <View pointerEvents="none" style={styles.selectedSheen} />}
           <Text style={[
             styles.optionText,
             selected === option.value && styles.optionTextSelected,
@@ -54,9 +61,13 @@ export function Stepper({ value, min, max, onChange, step = 1, label, style }: S
     <View style={[styles.stepper, style]}>
       {label && <Text style={styles.stepperLabel}>{label}</Text>}
       <View style={styles.stepperRow}>
+        <SurfaceTexture variant="card" intensity="subtle" style={styles.texture} />
         <TouchableOpacity
           style={[styles.stepperButton, value <= min && styles.stepperButtonDisabled]}
-          onPress={() => onChange(Math.max(min, value - step))}
+          onPress={() => {
+            hapticSelection();
+            onChange(Math.max(min, value - step));
+          }}
           disabled={value <= min}
         >
           <Text style={styles.stepperButtonText}>−</Text>
@@ -66,7 +77,10 @@ export function Stepper({ value, min, max, onChange, step = 1, label, style }: S
         </View>
         <TouchableOpacity
           style={[styles.stepperButton, value >= max && styles.stepperButtonDisabled]}
-          onPress={() => onChange(Math.min(max, value + step))}
+          onPress={() => {
+            hapticSelection();
+            onChange(Math.min(max, value + step));
+          }}
           disabled={value >= max}
         >
           <Text style={styles.stepperButtonText}>+</Text>
@@ -82,6 +96,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBg,
     borderRadius: radius.md,
     padding: 3,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   option: {
     flex: 1,
@@ -90,9 +107,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
   },
   optionSelected: {
     backgroundColor: colors.primary,
+    ...shadows.sm,
   },
   optionText: {
     color: colors.textSecondary,
@@ -119,6 +139,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBg,
     borderRadius: radius.md,
     padding: 3,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   stepperButton: {
     width: 40,
@@ -127,6 +150,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBgHover,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.sm,
   },
   stepperButtonDisabled: {
     opacity: 0.3,
@@ -145,5 +169,17 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold as any,
+  },
+  texture: {
+    opacity: 0.35,
+  },
+  selectedSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '42%',
+    backgroundColor: '#FFFFFF',
+    opacity: 0.1,
   },
 });

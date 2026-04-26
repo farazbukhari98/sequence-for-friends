@@ -471,6 +471,35 @@ export async function insertGameHistory(
   await db.batch(stmts);
 }
 
+export async function incrementSeriesStats(
+  db: D1Database,
+  results: { user_id: string; won: number }[]
+): Promise<void> {
+  for (const userId of new Set(results.map(result => result.user_id))) {
+    await ensureUserStatsRow(db, userId);
+  }
+
+  const stmts = results.map(result =>
+    db.prepare(`
+      UPDATE user_stats SET
+        series_played = series_played + 1,
+        series_won = series_won + ?,
+        series_lost = series_lost + ?,
+        updated_at = ?
+      WHERE user_id = ?
+    `).bind(
+      result.won,
+      result.won ? 0 : 1,
+      Date.now(),
+      result.user_id
+    )
+  );
+
+  if (stmts.length > 0) {
+    await db.batch(stmts);
+  }
+}
+
 export async function getGameHistory(
   db: D1Database,
   userId: string,

@@ -1,335 +1,391 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { Image, View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/stores/authStore';
 import { useGameStore } from '@/stores/gameStore';
-import { useFriendsStore } from '@/stores/friendsStore';
-import { Background } from '@/components/ui/Background';
-import { Logo } from '@/components/ui/Background';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { api } from '@/services/api';
+import { Background, Logo } from '@/components/ui/Background';
 import { AvatarBubble } from '@/components/ui/Avatar';
-import { colors, spacing, fontSize, fontWeight, radius } from '@/theme';
+import { SurfaceTexture } from '@/components/ui/GameTexture';
+import { gameImages } from '@/constants/gameAssets';
+import { hapticSelection } from '@/lib/haptics';
+import { colors, spacing, fontSize, fontWeight, radius, shadows } from '@/theme';
+import { emptyStats, type UserStats } from '@/types/game';
+
+type HomeAction = {
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  accent: string;
+  route: '/(main)/solo-practice' | '/(main)/create-room' | '/(main)/join-room' | '/(main)/friends';
+};
+
+const HOME_ACTIONS: HomeAction[] = [
+  {
+    title: 'Solo Table',
+    subtitle: 'Practice against a bot dealer',
+    icon: 'hardware-chip-outline',
+    accent: colors.success,
+    route: '/(main)/solo-practice',
+  },
+  {
+    title: 'Host Game',
+    subtitle: 'Build the table and rules',
+    icon: 'add-circle-outline',
+    accent: colors.gold,
+    route: '/(main)/create-room',
+  },
+  {
+    title: 'Join Room',
+    subtitle: 'Use a 5-character table code',
+    icon: 'enter-outline',
+    accent: colors.cyan,
+    route: '/(main)/join-room',
+  },
+  {
+    title: 'Friends',
+    subtitle: 'Invite players to the table',
+    icon: 'people-outline',
+    accent: colors.teamBlue,
+    route: '/(main)/friends',
+  },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
+  const { user, sessionToken } = useAuthStore();
   const { pendingRoomCode } = useGameStore();
-  const { sessionToken } = useAuthStore();
-  const { viewingDetailedStats, loadDetailedStats } = useFriendsStore();
+  const [stats, setStats] = React.useState<UserStats>(emptyStats);
 
-  React.useEffect(() => {
-    if (sessionToken) {
-      loadDetailedStats(sessionToken).catch(() => {});
-    }
-  }, [loadDetailedStats, sessionToken]);
-
-  const quickStats = viewingDetailedStats?.overall;
-
-  // Handle deep link invite
   React.useEffect(() => {
     if (pendingRoomCode) {
       Alert.alert('Game Invite', `You've been invited to room ${pendingRoomCode}. Join?`, [
         { text: 'Decline', style: 'cancel', onPress: () => useGameStore.getState().setPendingRoomCode(null) },
-        { text: 'Join', onPress: () => {
-          useGameStore.getState().setPendingRoomCode(null);
-          router.push('/(main)/join-room');
-        }},
+        {
+          text: 'Join',
+          onPress: () => {
+            useGameStore.getState().setPendingRoomCode(null);
+            router.push('/(main)/join-room');
+          },
+        },
       ]);
     }
-  }, [pendingRoomCode]);
+  }, [pendingRoomCode, router]);
+
+  React.useEffect(() => {
+    let active = true;
+    if (!sessionToken) return;
+
+    api.getMyStats(sessionToken)
+      .then((response) => {
+        if (active) setStats(response.stats);
+      })
+      .catch(() => {
+        if (active) setStats(emptyStats);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [sessionToken]);
+
+  const displayName = user?.displayName || user?.username || 'Player';
 
   return (
     <Background style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header */}
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: Math.max(spacing.xxl, insets.top + spacing.md), paddingBottom: insets.bottom + spacing.xl },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <Logo size="small" />
           <View style={styles.headerRight}>
-            <TouchableOpacity onPress={() => router.push('/(main)/friends')}>
-              <Text style={styles.navIcon}>👥</Text>
+            <TouchableOpacity onPress={() => { hapticSelection(); router.push('/(main)/friends'); }} style={styles.headerChip}>
+              <Ionicons name="people-outline" size={20} color={colors.textDark} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/(main)/profile')}>
+            <TouchableOpacity onPress={() => { hapticSelection(); router.push('/(main)/profile'); }} style={styles.profileButton}>
               {user && <AvatarBubble avatarId={user.avatarId} avatarColor={user.avatarColor} size={36} />}
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Greeting */}
-        <View style={styles.greeting}>
-          <Text style={styles.greetingText}>Hey, {user?.displayName || user?.username || 'Player'}</Text>
-          <Text style={styles.greetingSubtext}>Queue a quick solo match or rally your crew for a live room.</Text>
-        </View>
-
-        <Card style={styles.heroCard}>
-          <View style={styles.heroHeader}>
-            <View>
-              <Text style={styles.heroEyebrow}>Tonight’s Board</Text>
-              <Text style={styles.heroTitle}>Jump back into Sequence</Text>
+        <View style={styles.heroTable}>
+          <SurfaceTexture variant="wood" intensity="medium" style={styles.panelTexture} />
+          <View style={styles.heroTopLine}>
+            <View style={styles.heroTextBlock}>
+              <Text style={styles.eyebrow}>Classic Game Night</Text>
+              <Text style={styles.heroTitle}>Your Table Is Ready</Text>
+              <Text style={styles.heroCopy}>Welcome back, {displayName}. Choose a seat, deal in, and start building sequences.</Text>
             </View>
-            {pendingRoomCode ? (
-              <View style={styles.invitePill}>
-                <Text style={styles.invitePillText}>Invite • {pendingRoomCode}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          <View style={styles.heroStatsRow}>
-            <View style={styles.heroStatBlock}>
-              <Text style={styles.heroStatValue}>{quickStats?.gamesPlayed ?? 0}</Text>
-              <Text style={styles.heroStatLabel}>Games</Text>
-            </View>
-            <View style={styles.heroDivider} />
-            <View style={styles.heroStatBlock}>
-              <Text style={styles.heroStatValue}>{Math.round((quickStats?.winRate ?? 0) * 100)}%</Text>
-              <Text style={styles.heroStatLabel}>Win Rate</Text>
-            </View>
-            <View style={styles.heroDivider} />
-            <View style={styles.heroStatBlock}>
-              <Text style={styles.heroStatValue}>{quickStats?.currentWinStreak ?? 0}</Text>
-              <Text style={styles.heroStatLabel}>Streak</Text>
+            <View style={styles.heroArtFrame}>
+              <Image source={gameImages.cardsChipsVignette} style={styles.heroArtImage} resizeMode="contain" />
+              <View pointerEvents="none" style={styles.heroArtRing} />
             </View>
           </View>
-
-          <Button
-            title={pendingRoomCode ? `Join ${pendingRoomCode}` : 'Create a new game'}
-            onPress={() => router.push(pendingRoomCode ? '/(main)/join-room' : '/(main)/create-room')}
-            style={styles.heroButton}
-          />
-        </Card>
-
-        {/* Main Actions */}
-        <View style={styles.actions}>
-          <Card onPress={() => router.push('/(main)/solo-practice')} style={styles.actionCard}>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionEmoji}>🎯</Text>
-              <View style={styles.actionTextContainer}>
-                <Text style={styles.actionTitle}>Solo Practice</Text>
-                <Text style={styles.actionSubtitle}>Play against AI bots</Text>
-              </View>
-              <Text style={styles.actionChevron}>›</Text>
-            </View>
-          </Card>
-
-          <Card onPress={() => router.push('/(main)/create-room')} style={styles.actionCard}>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionEmoji}>🎮</Text>
-              <View style={styles.actionTextContainer}>
-                <Text style={styles.actionTitle}>Create Game</Text>
-                <Text style={styles.actionSubtitle}>Set up a match</Text>
-              </View>
-              <Text style={styles.actionChevron}>›</Text>
-            </View>
-          </Card>
-
-          <Card onPress={() => router.push('/(main)/join-room')} style={styles.actionCard}>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionEmoji}>🔗</Text>
-              <View style={styles.actionTextContainer}>
-                <Text style={styles.actionTitle}>Join Game</Text>
-                <Text style={styles.actionSubtitle}>Enter a room code</Text>
-              </View>
-              <Text style={styles.actionChevron}>›</Text>
-            </View>
-          </Card>
-
-          <Card onPress={() => router.push('/(main)/friends')} style={styles.actionCard}>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionEmoji}>👥</Text>
-              <View style={styles.actionTextContainer}>
-                <Text style={styles.actionTitle}>Play with Friends</Text>
-                <Text style={styles.actionSubtitle}>Find & invite friends</Text>
-              </View>
-              <Text style={styles.actionChevron}>›</Text>
-            </View>
-          </Card>
         </View>
 
-        {/* Quick Stats */}
-        {user && (
-          <Card style={styles.statsCard}>
-            <Text style={styles.statsTitle}>Your Stats</Text>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{quickStats?.gamesWon ?? 0}</Text>
-                <Text style={styles.statLabel}>Wins</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Choose Your Seat</Text>
+          <Text style={styles.sectionMeta}>Fast play</Text>
+        </View>
+
+        <View style={styles.actionGrid}>
+          {HOME_ACTIONS.map((action) => (
+            <TouchableOpacity
+              key={action.title}
+              style={[styles.actionTile, { borderColor: action.accent }]}
+              onPress={() => {
+                hapticSelection();
+                router.push(action.route);
+              }}
+              activeOpacity={0.86}
+            >
+              <SurfaceTexture variant="card" intensity="subtle" style={styles.tileTexture} />
+              <View style={[styles.actionIcon, { backgroundColor: action.accent }]}>
+                <Ionicons name={action.icon} size={24} color="#fff" />
               </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{quickStats?.seriesWon ?? 0}</Text>
-                <Text style={styles.statLabel}>Series</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{quickStats?.hasBeatImpossibleBot ? 'YES' : 'NO'}</Text>
-                <Text style={styles.statLabel}>Beat Impossible</Text>
-              </View>
-            </View>
-            <TouchableOpacity onPress={() => router.push('/(main)/detailed-stats')}>
-              <Text style={styles.statsLink}>View Detailed Stats ›</Text>
+              <Text style={styles.actionTitle}>{action.title}</Text>
+              <Text style={styles.actionSubtitle}>{action.subtitle}</Text>
             </TouchableOpacity>
-          </Card>
+          ))}
+        </View>
+
+        {user && (
+          <View style={styles.statsPanel}>
+            <SurfaceTexture variant="card" intensity="subtle" style={styles.panelTexture} />
+            <View style={styles.statsHeader}>
+              <Text style={styles.statsTitle}>Scoreboard</Text>
+              <TouchableOpacity onPress={() => { hapticSelection(); router.push('/(main)/detailed-stats'); }}>
+                <Text style={styles.statsLink}>Details</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.statsRow}>
+              <StatChip value={String(stats.gamesPlayed)} label="Games" />
+              <StatChip value={`${Math.round(stats.winRate * 100)}%`} label="Win Rate" />
+              <StatChip value={String(stats.gamesWon)} label="Wins" />
+            </View>
+          </View>
         )}
       </ScrollView>
     </Background>
   );
 }
 
+function StatChip({ value, label }: { value: string; label: string }) {
+  return (
+    <View style={styles.statChip}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.xxl },
+  scrollContent: { paddingHorizontal: spacing.lg },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  navIcon: {
-    fontSize: 24,
+  headerChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.primary,
+    ...shadows.sm,
   },
-  greeting: {
-    marginBottom: spacing.xl,
+  profileButton: {
+    borderWidth: 2,
+    borderColor: colors.gold,
+    borderRadius: 22,
   },
-  greetingText: {
-    color: colors.text,
-    fontSize: fontSize.xxl,
-    fontWeight: fontWeight.bold as any,
-  },
-  greetingSubtext: {
-    color: colors.textSecondary,
-    fontSize: fontSize.base,
-    marginTop: spacing.xs,
-    maxWidth: 280,
-    lineHeight: 22,
-  },
-  heroCard: {
+  heroTable: {
+    backgroundColor: colors.primaryDark,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: '#4A2511',
     padding: spacing.lg,
     marginBottom: spacing.xl,
-    borderRadius: radius.xl,
-    backgroundColor: colors.bgElevated,
+    position: 'relative',
+    overflow: 'hidden',
+    ...shadows.lg,
   },
-  heroHeader: {
+  heroTopLine: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.lg,
     gap: spacing.md,
   },
-  heroEyebrow: {
-    color: colors.primary,
+  heroTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  eyebrow: {
+    color: colors.gold,
     fontSize: fontSize.xs,
-    fontWeight: fontWeight.semibold as any,
-    letterSpacing: 0.8,
+    fontWeight: fontWeight.bold as any,
     textTransform: 'uppercase',
-    marginBottom: spacing.xs,
   },
   heroTitle: {
-    color: colors.text,
-    fontSize: fontSize.xl,
+    color: colors.textOnDark,
+    fontSize: fontSize.xxl,
     fontWeight: fontWeight.bold as any,
+    marginTop: spacing.xs,
   },
-  invitePill: {
-    backgroundColor: colors.primary + '22',
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+  heroArtFrame: {
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+    backgroundColor: 'rgba(13,59,34,0.8)',
+    borderWidth: 2,
+    borderColor: 'rgba(212,175,55,0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+    ...shadows.md,
   },
-  invitePillText: {
-    color: colors.primary,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.semibold as any,
+  heroArtImage: {
+    width: 112,
+    height: 112,
   },
-  heroStatsRow: {
+  heroArtRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 59,
+    borderWidth: 8,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  heroCopy: {
+    color: colors.textOnDarkSecondary,
+    fontSize: fontSize.base,
+    lineHeight: 21,
+    marginTop: spacing.md,
+  },
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
-  heroStatBlock: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  heroStatValue: {
-    color: colors.text,
-    fontSize: fontSize.xl,
+  sectionTitle: {
+    color: colors.textOnDark,
+    fontSize: fontSize.lg,
     fontWeight: fontWeight.bold as any,
   },
-  heroStatLabel: {
-    color: colors.textTertiary,
-    fontSize: fontSize.xs,
-    marginTop: spacing.xs / 2,
+  sectionMeta: {
+    color: colors.textOnDarkTertiary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold as any,
   },
-  heroDivider: {
-    width: 1,
-    height: 36,
-    backgroundColor: colors.divider,
-  },
-  heroButton: {
-    marginTop: spacing.xs,
-  },
-  actions: {
+  actionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.md,
     marginBottom: spacing.xl,
   },
-  actionCard: {
-    padding: spacing.lg,
+  actionTile: {
+    width: '47.8%',
+    minHeight: 148,
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    padding: spacing.md,
+    justifyContent: 'space-between',
+    position: 'relative',
+    ...shadows.md,
   },
-  actionContent: {
-    flexDirection: 'row',
+  actionIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
-  },
-  actionEmoji: {
-    fontSize: 28,
-    marginRight: spacing.md,
-  },
-  actionTextContainer: {
-    flex: 1,
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.72)',
   },
   actionTitle: {
-    color: colors.text,
+    color: colors.textDark,
     fontSize: fontSize.md,
-    fontWeight: fontWeight.semibold as any,
+    fontWeight: fontWeight.bold as any,
+    marginTop: spacing.md,
   },
   actionSubtitle: {
-    color: colors.textTertiary,
+    color: colors.textDarkTertiary,
     fontSize: fontSize.sm,
-    marginTop: spacing.xs / 2,
+    lineHeight: 18,
+    marginTop: spacing.xs,
   },
-  actionChevron: {
-    color: colors.textTertiary,
-    fontSize: 24,
-    fontWeight: fontWeight.bold as any,
-  },
-  statsCard: {
-    padding: spacing.lg,
+  statsPanel: {
+    backgroundColor: '#E8DCC4',
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    padding: spacing.md,
     marginBottom: spacing.xl,
+    position: 'relative',
+    ...shadows.md,
+  },
+  panelTexture: {
+    opacity: 0.24,
+  },
+  tileTexture: {
+    opacity: 0.26,
+  },
+  statsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
   },
   statsTitle: {
-    color: colors.text,
+    color: colors.textDark,
     fontSize: fontSize.md,
-    fontWeight: fontWeight.semibold as any,
-    marginBottom: spacing.md,
+    fontWeight: fontWeight.bold as any,
+  },
+  statsLink: {
+    color: colors.primaryDark,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold as any,
   },
   statsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingVertical: spacing.md,
+    gap: spacing.sm,
   },
-  statItem: { alignItems: 'center' },
-  statValue: { color: colors.text, fontSize: fontSize.lg, fontWeight: fontWeight.bold as any },
-  statLabel: { color: colors.textTertiary, fontSize: fontSize.xs, marginTop: spacing.xs / 2 },
-  statDivider: { width: 1, height: 30, backgroundColor: colors.divider },
-  statsLink: {
-    color: colors.primary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium as any,
-    textAlign: 'center',
-    marginTop: spacing.md,
+  statChip: {
+    flex: 1,
+    minHeight: 74,
+    borderRadius: radius.md,
+    backgroundColor: colors.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  statValue: {
+    color: colors.textDark,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold as any,
+  },
+  statLabel: {
+    color: colors.textDarkTertiary,
+    fontSize: fontSize.xs,
+    marginTop: spacing.xs,
   },
 });
